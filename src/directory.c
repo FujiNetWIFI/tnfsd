@@ -803,6 +803,7 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 {
 	struct dirent *entry;
 	char statpath[MAX_TNFSPATH];
+	char temp_statpath[MAX_TNFSPATH*2];
 
 	// Free any existing entries
 	dirlist_free(dirh->entry_list);
@@ -822,7 +823,8 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 	{
 		// Try to stat the file before we can decide on other things
 		fileinfo_t finf;
-		snprintf(statpath, sizeof(statpath), "%s%c%s", dirh->path, FILEINFO_PATHSEPARATOR, entry->d_name);
+		snprintf(temp_statpath, sizeof(temp_statpath), "%s%c%s", dirh->path, FILEINFO_PATHSEPARATOR, entry->d_name);
+		strncpy(statpath, temp_statpath, sizeof(statpath));
 		if (get_fileinfo(statpath, &finf) == 0)
 		{
 			/* If it's not a directory and we have a pattern that this doesn't match, skip it
