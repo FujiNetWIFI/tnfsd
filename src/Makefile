@@ -32,7 +32,7 @@ ifdef USAGELOG
 endif
 
 CFLAGS=$(FLAGS) $(EXFLAGS) $(LOGFLAGS)
-OBJS=main.o datagram.o log.o session.o endian.o directory.o errortable.o tnfs_file.o chroot.o fileinfo.o stats.o $(EXOBJS)
+OBJS=main.o datagram.o log.o session.o endian.o directory.o errortable.o tnfs_file.o chroot.o fileinfo.o stats.o auth.o $(EXOBJS)
 
 all:	$(OBJS)
 	$(CC) -o ../bin/$(EXEC) $(OBJS) $(LIBS)

@@ -50,6 +50,7 @@
 #include "endian.h"
 #include "bsdcompat.h"
 #include "log.h"
+#include "auth.h"
 
 char fnbuf[MAX_FILEPATH];
 unsigned char iobuf[MAX_IOSZ + 2]; /* 2 bytes added for the size param */
@@ -95,13 +96,19 @@ void tnfs_open(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 		return;
 	}
 
+	flags = *buf + (*(buf + 1) * 256);
+	mode = *(buf + 2) + (*(buf + 3) * 256);
+
+	if (!is_open_allowed(fnbuf, flags))
+	{
+		tnfs_notpermitted(hdr);
+		return;
+	}
+
 	for (i = 0; i < MAX_FD_PER_CONN; i++)
 	{
 		if (s->fd[i] == 0)
 		{
-			flags = *buf + (*(buf + 1) * 256);
-			mode = *(buf + 2) + (*(buf + 3) * 256);
-
 #ifdef WITH_ZIP
 			fd = zipopen(fnbuf, tnfs_make_mode(flags), mode);
 #else

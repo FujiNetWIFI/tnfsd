@@ -25,6 +25,7 @@ TNFS daemon datagram handler
 */
 
 #include <sys/types.h>
+#include <stdbool.h>
 #include <stdio.h>
 #include <string.h>
 #include <errno.h>
@@ -52,9 +53,11 @@ TNFS daemon datagram handler
 #include "errortable.h"
 #include "directory.h"
 #include "tnfs_file.h"
+#include "auth.h"
 
-int sockfd;		 /* UDP global socket file descriptor */
-int tcplistenfd; /* TCP listening socket file descriptor */
+int sockfd;         /* UDP global socket file descriptor */
+int tcplistenfd;    /* TCP listening socket file descriptor */
+bool write_support; /* Whether writes should be enabled. */
 
 tnfs_cmdfunc dircmd[NUM_DIRCMDS] =
 	{&tnfs_opendir, &tnfs_readdir, &tnfs_closedir,
@@ -380,6 +383,12 @@ void tnfs_decode(struct sockaddr_in *cliaddr, int cli_fd, int rxbytes, unsigned 
 	TNFSMSGLOG(&hdr, "REQUEST cmd=0x%02x %s", hdr.cmd, get_cmd_name(hdr.cmd));
 #endif
 
+	if (!is_cmd_allowed(hdr.cmd))
+	{
+		tnfs_notpermitted(&hdr);
+		return;
+	}
+
 	/* The MOUNT command is the only one that doesn't need an
 	 * established session (since MOUNT is actually what will
 	 * establish the session) */
@@ -463,6 +472,13 @@ void tnfs_badcommand(Header *hdr, Session *sess)
 	TNFSMSGLOG(hdr, "Bad command");
 	hdr->status = TNFS_ENOSYS;
 	tnfs_send(sess, hdr, NULL, 0);
+}
+
+void tnfs_notpermitted(Header *hdr)
+{
+	TNFSMSGLOG(hdr, "Command %s is not permitted", get_cmd_name(hdr->cmd));
+	hdr->status = TNFS_EPERM;
+	tnfs_send(NULL, hdr, NULL, 0);
 }
 
 void tnfs_send(Session *sess, Header *hdr, unsigned char *msg, int msgsz)

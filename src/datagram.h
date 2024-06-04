@@ -59,6 +59,7 @@ void tnfs_decode(struct sockaddr_in *cliaddr, int cli_fd,
 	int rxbytes, unsigned char *rxbuf);
 void tnfs_invalidsession(Header *hdr);
 void tnfs_badcommand(Header *hdr, Session *sess);
+void tnfs_notpermitted(Header *hdr);
 void tnfs_send(Session *sess, Header *hdr, unsigned char *msg, int msgsz);
 void tnfs_resend(Session *sess, struct sockaddr_in *cliaddr, int cli_fd);
 #endif
