@@ -41,11 +41,6 @@
 #define in_addr_t uint32_t
 #endif
 
-/* definition of FD_COPY macro used in OpenBSD */
-#ifndef FD_COPY
-#define FD_COPY(f, t)   memcpy(t, f, sizeof(*(f)))
-#endif
-
 #include "stats.h"
 #include "tnfs.h"
 

@@ -78,7 +78,7 @@ void chroot_tnfs(const char *user, const char *group, const char *newroot)
 
 void warn_if_root(void)
 {
-	if((getuid() == 0) | (getgid() == 0))
+	if((getuid() == 0) || (getgid() == 0))
 		fprintf(stderr, "WARNING: running as root.\nConsider running tnfsd jailed with -u user -g group\n");
 }
 #endif

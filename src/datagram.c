@@ -35,8 +35,6 @@ TNFS daemon datagram handler
 #ifdef UNIX
 #include <sys/socket.h>
 #include <netinet/in.h>
-#include <sys/select.h>
-#define SOCKET_ERROR -1
 #endif
 
 #ifdef WIN32
@@ -52,6 +50,7 @@ TNFS daemon datagram handler
 #include "errortable.h"
 #include "directory.h"
 #include "tnfs_file.h"
+#include "event.h"
 
 int sockfd;		 /* UDP global socket file descriptor */
 int tcplistenfd; /* TCP listening socket file descriptor */
@@ -174,54 +173,40 @@ void tnfs_sockinit(int port)
 
 void tnfs_mainloop()
 {
-	int readyfds, i;
-	fd_set fdset;
-	fd_set errfdset;
+	int i;
 	TcpConnection tcpsocks[MAX_TCP_CONN];
-	struct timeval select_timeout;
 	time_t last_stats_report = 0;
 	time_t now = 0;
 
 	memset(&tcpsocks, 0, sizeof(tcpsocks));
 
+	/* add UDP socket and TCP listen socket to event listener */
+	tnfs_event_register(sockfd);
+	tnfs_event_register(tcplistenfd);
+
 	while (1)
 	{
-		FD_ZERO(&fdset);
-
-		/* add UDP socket and TCP listen socket to fdset */
-		FD_SET(sockfd, &fdset);
-		FD_SET(tcplistenfd, &fdset);
-
-		for (i = 0; i < MAX_TCP_CONN; i++)
+		event_wait_res_t *wait_res = tnfs_event_wait(1);
+		if (wait_res->size == SOCKET_ERROR)
 		{
-			if (tcpsocks[i].cli_fd)
-			{
-				FD_SET(tcpsocks[i].cli_fd, &fdset);
-			}
-		}
-
-		FD_COPY(&fdset, &errfdset);
-		select_timeout.tv_sec = 1;
-
-		readyfds = select(FD_SETSIZE, &fdset, NULL, &errfdset, &select_timeout);
-		if (readyfds == SOCKET_ERROR) {
 			LOG("tnfs_mainloop: select failed\n");
 			break;
 		}
 
-		if (readyfds == 0) {
+		if (wait_res->size == 0)
+		{
 			// Just a normal timeout, reloop
 			continue;
 		}
 
 		/* UDP message? */
-		if (FD_ISSET(sockfd, &fdset))
+		if (tnfs_event_is_active(wait_res, sockfd))
 		{
 			tnfs_handle_udpmsg();
 		}
 
 		/* Incoming TCP connection? */
-		if (FD_ISSET(tcplistenfd, &fdset))
+		if (tnfs_event_is_active(wait_res, tcplistenfd))
 		{
 			tcp_accept(&tcpsocks[0]);
 		}
@@ -231,7 +216,7 @@ void tnfs_mainloop()
 		{
 			if (tcpsocks[i].cli_fd)
 			{
-				if (FD_ISSET(tcpsocks[i].cli_fd, &fdset))
+				if (tnfs_event_is_active(wait_res, tcpsocks[i].cli_fd))
 				{
 					tnfs_handle_tcpmsg(&tcpsocks[i]);
 				}
@@ -269,17 +254,26 @@ void tcp_accept(TcpConnection *tcp_conn_list)
 		return;
 	}
 
-	tcp_conn = tcp_conn_list;
-	for (i = 0; i < MAX_TCP_CONN; i++)
+	bool event_registered = false;
+	if (tnfs_event_register(acc_fd))
 	{
-		if (tcp_conn->cli_fd == 0)
+		event_registered = true;
+		tcp_conn = tcp_conn_list;
+		for (i = 0; i < MAX_TCP_CONN; i++)
 		{
-			MSGLOG(cliaddr.sin_addr.s_addr, "New TCP connection at index %d.", i);
-			tcp_conn->cli_fd = acc_fd;
-			tcp_conn->cliaddr = cliaddr;
-			return;
+			if (tcp_conn->cli_fd == 0)
+			{
+				MSGLOG(cliaddr.sin_addr.s_addr, "New TCP connection at index %d.", i);
+				tcp_conn->cli_fd = acc_fd;
+				tcp_conn->cliaddr = cliaddr;
+				return;
+			}
+			tcp_conn++;
 		}
-		tcp_conn++;
+	}
+	if (event_registered)
+	{
+		tnfs_event_unregister(acc_fd);
 	}
 
 	MSGLOG(cliaddr.sin_addr.s_addr, "Can't accept client; too many connections.");
@@ -300,7 +294,11 @@ void tcp_accept(TcpConnection *tcp_conn_list)
 
 void tnfs_handle_udpmsg()
 {
+#ifdef WIN32
+	int len;
+#else
 	socklen_t len;
+#endif
 	int rxbytes;
 	struct sockaddr_in cliaddr;
 	unsigned char rxbuf[MAXMSGSZ];
@@ -349,7 +347,7 @@ void tnfs_handle_tcpmsg(TcpConnection *tcp_conn)
 #else
 		close(tcp_conn->cli_fd);
 #endif
-
+		tnfs_event_unregister(tcp_conn->cli_fd);
 		tcp_conn->cli_fd = 0;
 		return;
 	}

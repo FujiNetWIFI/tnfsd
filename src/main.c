@@ -29,6 +29,7 @@
 #include <unistd.h>
 
 #include "datagram.h"
+#include "event.h"
 #include "session.h"
 #include "directory.h"
 #include "errortable.h"
@@ -141,8 +142,10 @@ int main(int argc, char **argv)
 
 	tnfs_init();		/* initialize structures etc. */
 	tnfs_init_errtable();	/* initialize error lookup table */
+	tnfs_event_init();
 	tnfs_sockinit(port);	/* initialize communications */
 	tnfs_mainloop();	/* run */
+	tnfs_event_close();
 
 	return 0;
 }

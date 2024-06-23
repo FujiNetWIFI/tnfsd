@@ -803,7 +803,7 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 {
 	struct dirent *entry;
 	char statpath[MAX_TNFSPATH];
-	char temp_statpath[MAX_TNFSPATH*2];
+	char temp_statpath[MAX_TNFSPATH*2 + 4];
 
 	// Free any existing entries
 	dirlist_free(dirh->entry_list);
