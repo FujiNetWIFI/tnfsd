@@ -15,7 +15,6 @@ int RW_CMDS[] =
 
 int RW_FLAGS =
     TNFS_O_WRONLY |
-    TNFS_O_RDWR   |
     TNFS_O_APPEND |
     TNFS_O_CREAT  |
     TNFS_O_TRUNC  |
