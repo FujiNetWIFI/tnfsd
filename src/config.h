@@ -15,8 +15,7 @@
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
  * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
  * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
- * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
- * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  * THE SOFTWARE.
  *
@@ -42,5 +41,8 @@
 #define MAX_FILENAME_LEN 256	/* longest filename supported */
 #define MAX_IOSZ	512	/* maximum size of an IO operation */
 #define STATS_INTERVAL 60   /* how often the server stats should be logged. 0 to disable stats logging. */
+#define TCP_KA_IDLE 30 /* the time (in seconds) the connection needs to remain idle before TCP starts sending keepalive probes */
+#define TCP_KA_INTVL 1  /* the time (in seconds) between individual keepalive probes */
+#define TCP_KA_COUNT 60 /* the maximum number of keepalive probes TCP should send before dropping the connection */
 
 #endif

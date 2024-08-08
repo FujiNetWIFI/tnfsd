@@ -17,7 +17,7 @@ ifeq ($(OS),Windows_NT)
     EXEC = tnfsd.exe
 endif
 ifeq ($(OS),BSD)
-    FLAGS = -Wall -DUNIX -DENABLE_CHROOT -DNEED_ERRTABLE
+    FLAGS = -Wall -DUNIX -DENABLE_CHROOT -DNEED_ERRTABLE -DBSD
     EXOBJS = event_kqueue.o
     LIBS =
     EXEC = tnfsd

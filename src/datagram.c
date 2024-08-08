@@ -36,6 +36,7 @@ TNFS daemon datagram handler
 #ifdef UNIX
 #include <sys/socket.h>
 #include <netinet/in.h>
+#include <netinet/tcp.h>
 #endif
 
 #ifdef WIN32
@@ -158,6 +159,37 @@ void tnfs_sockinit(int port)
 	{
 		die("setsockopt(SO_REUSEADDR) failed");
 	}
+
+#ifndef WIN32
+   /* enables sending of keep-alive messages */
+   int ka_enable = 1;
+	if (setsockopt(tcplistenfd, SOL_SOCKET, SO_KEEPALIVE, &ka_enable, sizeof(ka_enable)) < 0)
+	{
+		die("setsockopt(SO_KEEPALIVE) failed");
+	}
+   int ka_idle = TCP_KA_IDLE;
+#ifdef BSD 
+	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPALIVE, &ka_idle, sizeof(ka_idle)) < 0)
+#else
+	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPIDLE, &ka_idle, sizeof(ka_idle)) < 0)
+#endif
+	{
+		die("setsockopt(TCP_KEEPIDLE) failed");
+	}
+   /* the time (in seconds) between individual keepalive probes */
+   int ka_interval = TCP_KA_INTVL;
+	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPINTVL, &ka_interval, sizeof(ka_interval)) < 0)
+	{
+		die("setsockopt(TCP_KEEPINTVL) failed");
+	}
+   /* the maximum number of keepalive probes TCP should send before dropping the connection */
+   int ka_count = TCP_KA_COUNT;
+	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPCNT, &ka_count, sizeof(ka_count)) < 0)
+	{
+		die("setsockopt(TCP_KEEPCNT) failed");
+	}
+#endif
+
 #ifndef WIN32
 	signal(SIGPIPE, SIG_IGN);
 #endif

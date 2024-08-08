@@ -334,6 +334,7 @@ void tnfs_reset_cli_fd_in_sessions(int cli_fd)
 			if (s->cli_fd == cli_fd)
 			{
 				LOG("Removing TCP connection handle from session 0x%02x\n", s->sid);
+            tnfs_freesession(s, i);
 				s->cli_fd = 0;
 			}
 		}
