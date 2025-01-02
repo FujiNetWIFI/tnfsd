@@ -1,5 +1,12 @@
 # TNFS - The Trivial Network Filesystem
 
+## Latest Release
+See [Releases](https://github.com/FujiNetWIFI/tnfsd/releases) to download the most recent pre-compiled versions of the TNFS daemon.
+
+## Setup Instructions
+
+For instructions on running a TNFS server locally, see [Setting up a TNFS Server](https://github.com/FujiNetWIFI/fujinet-firmware/wiki/Setting-up-a-TNFS-Server) on the main Wiki.
+
 ## Rationale
 
 Protocols such as NFS (Unix) or SMB (Windows) are overly complex for 8 bit
