@@ -45,7 +45,8 @@
 #include "tnfs.h"
 
 /* Handle the socket interface */
-void tnfs_sockinit(int port);
+int tnfs_sockinit(int port);
+void tnfs_sockclose();
 void tnfs_mainloop();
 void tnfs_handle_udpmsg();
 void tcp_accept(TcpConnection *tcp_conn_list);
@@ -58,5 +59,6 @@ void tnfs_notpermitted(Header *hdr);
 void tnfs_send(Session *sess, Header *hdr, unsigned char *msg, int msgsz);
 void tnfs_resend(Session *sess, struct sockaddr_in *cliaddr, int cli_fd);
 void tnfs_close_stale_connections(TcpConnection *tcp_conn_list);
+void tnfs_close_all_connections(TcpConnection *tcp_conn_list);
 void tnfs_close_tcp(TcpConnection *tcp_conn);
 #endif

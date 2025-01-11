@@ -124,20 +124,26 @@ const char *get_cmd_name(uint8_t cmd)
 	return "UNKNOWN_CMD";
 }
 
-void tnfs_sockinit(int port)
+int tnfs_sockinit(int port)
 {
 	struct sockaddr_in servaddr;
 
 #ifdef WIN32
 	WSADATA wsaData;
 	if (WSAStartup(MAKEWORD(2, 0), &wsaData) != 0)
-		die("WSAStartup() failed");
+	{
+		LOG("WSAStartup() failed");
+		return -1;
+	}
 #endif
 
 	/* Create the UDP socket */
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sockfd < 0)
-		die("Unable to open socket");
+	{
+		LOG("Unable to open socket");
+		return -1;
+	}
 
 	/* set up the network */
 	memset(&servaddr, 0, sizeof(servaddr));
@@ -146,18 +152,26 @@ void tnfs_sockinit(int port)
 	servaddr.sin_port = htons(port);
 
 	if (bind(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
-		die("Unable to bind");
+	{
+		LOG("Unable to bind");
+		close(sockfd);
+		return -1;
+	}
 
 	/* Create the TCP socket */
 	tcplistenfd = socket(AF_INET, SOCK_STREAM, 0);
 	if (tcplistenfd < 0)
 	{
-		die("Unable to create TCP socket");
+		LOG("Unable to create TCP socket");
+		close(sockfd);
+		return -1;
 	}
 	int reuseaddr = 1;
 	if (setsockopt(tcplistenfd, SOL_SOCKET, SO_REUSEADDR, (const char *)&reuseaddr, sizeof(reuseaddr)) < 0)
 	{
-		die("setsockopt(SO_REUSEADDR) failed");
+		LOG("setsockopt(SO_REUSEADDR) failed");
+		tnfs_sockclose();
+		return -1;
 	}
 
 #ifndef WIN32
@@ -165,7 +179,9 @@ void tnfs_sockinit(int port)
    int ka_enable = 1;
 	if (setsockopt(tcplistenfd, SOL_SOCKET, SO_KEEPALIVE, &ka_enable, sizeof(ka_enable)) < 0)
 	{
-		die("setsockopt(SO_KEEPALIVE) failed");
+		LOG("setsockopt(SO_KEEPALIVE) failed");
+		tnfs_sockclose();
+		return -1;
 	}
    int ka_idle = TCP_KA_IDLE;
 #ifdef BSD 
@@ -174,19 +190,25 @@ void tnfs_sockinit(int port)
 	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPIDLE, &ka_idle, sizeof(ka_idle)) < 0)
 #endif
 	{
-		die("setsockopt(TCP_KEEPIDLE) failed");
+		LOG("setsockopt(TCP_KEEPIDLE) failed");
+		tnfs_sockclose();
+		return -1;
 	}
-   /* the time (in seconds) between individual keepalive probes */
-   int ka_interval = TCP_KA_INTVL;
+	/* the time (in seconds) between individual keepalive probes */
+	int ka_interval = TCP_KA_INTVL;
 	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPINTVL, &ka_interval, sizeof(ka_interval)) < 0)
 	{
-		die("setsockopt(TCP_KEEPINTVL) failed");
+		LOG("setsockopt(TCP_KEEPINTVL) failed");
+		tnfs_sockclose();
+		return -1;
 	}
-   /* the maximum number of keepalive probes TCP should send before dropping the connection */
-   int ka_count = TCP_KA_COUNT;
+	/* the maximum number of keepalive probes TCP should send before dropping the connection */
+	int ka_count = TCP_KA_COUNT;
 	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPCNT, &ka_count, sizeof(ka_count)) < 0)
 	{
-		die("setsockopt(TCP_KEEPCNT) failed");
+		LOG("setsockopt(TCP_KEEPCNT) failed");
+		tnfs_sockclose();
+		return -1;
 	}
 #endif
 
@@ -201,9 +223,23 @@ void tnfs_sockinit(int port)
 	if (bind(tcplistenfd, (struct sockaddr *)&servaddr,
 			 sizeof(servaddr)) < 0)
 	{
-		die("Unable to bind TCP socket");
+		LOG("Unable to bind TCP socket");
+		tnfs_sockclose();
+		return -1;
 	}
 	listen(tcplistenfd, 5);
+	return 0;
+}
+
+void tnfs_sockclose()
+{
+#ifdef WIN32
+	closesocket(tcplistenfd);
+	closesocket(sockfd);
+#else
+	close(tcplistenfd);
+	close(sockfd);
+#endif
 }
 
 void tnfs_mainloop()
@@ -219,14 +255,13 @@ void tnfs_mainloop()
 	tnfs_event_register(sockfd);
 	tnfs_event_register(tcplistenfd);
 
-	while (1)
+	while (true)
 	{
 		tnfs_close_stale_connections(tcpsocks);
 
 		event_wait_res_t *wait_res = tnfs_event_wait(1);
 		if (wait_res->size == SOCKET_ERROR)
 		{
-			LOG("tnfs_mainloop: select failed\n");
 			break;
 		}
 
@@ -245,7 +280,7 @@ void tnfs_mainloop()
 		/* Incoming TCP connection? */
 		if (tnfs_event_is_active(wait_res, tcplistenfd))
 		{
-			tcp_accept(&tcpsocks[0]);
+			tcp_accept(tcpsocks);
 		}
 
 		// was the fdset relevant to any of the existing connections?
@@ -267,6 +302,7 @@ void tnfs_mainloop()
 			last_stats_report = now;
 		}
 	}
+	tnfs_close_all_connections(tcpsocks);
 }
 
 void tcp_accept(TcpConnection *tcp_conn_list)
@@ -601,5 +637,17 @@ void tnfs_close_stale_connections(TcpConnection *tcp_conn_list)
 			}
 		}
 		tcp_conn++;
+	}
+}
+
+void tnfs_close_all_connections(TcpConnection *tcp_conn_list)
+{
+	TcpConnection *tcp_conn = tcp_conn_list;
+	for (int i = 0; i < MAX_TCP_CONN; i++)
+	{
+		if (tcp_conn->cli_fd != 0)
+		{
+			tnfs_close_tcp(tcp_conn);
+		}
 	}
 }

@@ -74,7 +74,6 @@ event_wait_res_t* tnfs_event_wait(int timeout_sec)
 
     if (readyfds == SOCKET_ERROR)
     {
-        LOG("tnfs_event_wait: select failed\n");
         wait_result.size = SOCKET_ERROR;
         return &wait_result;
     }
@@ -96,5 +95,5 @@ event_wait_res_t* tnfs_event_wait(int timeout_sec)
 
 void tnfs_event_close()
 {
-    // do nothing
+    free(wait_result.fds);
 }

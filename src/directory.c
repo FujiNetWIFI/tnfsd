@@ -111,7 +111,7 @@ char root[MAX_ROOT]; /* root for all operations */
 char realroot[MAX_ROOT]; /* full path of the tnfs root dir */
 char dirbuf[MAX_FILEPATH];
 
-int tnfs_setroot(char *rootdir)
+int tnfs_setroot(const char *rootdir)
 {
 	if (strlen(rootdir) > MAX_ROOT)
 		return -1;

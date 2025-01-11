@@ -14,8 +14,8 @@ event_wait_res_t wait_result;
 
 void tnfs_event_init()
 {
-    epfd = epoll_create(1);
     wait_result.fds = calloc(_EVENT_MAX_FDS, sizeof(int));
+    epfd = epoll_create(1);
 }
 
 bool tnfs_event_register(int fd)
@@ -46,7 +46,6 @@ event_wait_res_t* tnfs_event_wait(int timeout_sec)
 
     if (readyfds == -1)
     {
-        LOG("tnfs_event_wait: epoll_wait failed\n");
         wait_result.size = -1;
         return &wait_result;
     }
@@ -63,4 +62,5 @@ event_wait_res_t* tnfs_event_wait(int timeout_sec)
 void tnfs_event_close()
 {
     close(epfd);
+    free(wait_result.fds);
 }

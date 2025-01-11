@@ -28,15 +28,12 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <unistd.h>
+#include <string.h>
+#include <signal.h>
 
-#include "datagram.h"
-#include "event.h"
-#include "session.h"
-#include "directory.h"
-#include "errortable.h"
 #include "chroot.h"
 #include "log.h"
-#include "auth.h"
+#include "tnfsd.h"
 
 /* declare the main() - it won't be used elsewhere so I'll not bother
  * with putting it in a .h file */
@@ -51,6 +48,7 @@ int main(int argc, char **argv)
 #endif
     bool read_only = false;
     char *pvalue = NULL;
+    char *root_path = NULL;
 
     if(argc >= 2)
     {
@@ -89,9 +87,9 @@ int main(int argc, char **argv)
     else
     {
     #ifdef ENABLE_CHROOT
-    LOG("Usage: tnfsd <root dir> [-u <username> -g <group> -p <port>] -r\n");
+    LOG("Usage: tnfsd <root dir> [-u <username> -g <group> -p <port> -r]\n");
     #else
-    LOG("Usage: tnfsd <root dir> [-p <port>] -r\n");
+    LOG("Usage: tnfsd <root dir> [-p <port> -r]\n");
     #endif
     exit(-1);
     }
@@ -109,25 +107,17 @@ int main(int argc, char **argv)
             LOG("chroot group required\n");
             exit(-1);
         }
+	    LOG("tnfsd will be jailed at %s\n", argv[optind]);
         chroot_tnfs(uvalue, gvalue, argv[optind]);
-        if (tnfs_setroot("/") < 0)
-        {
-            LOG("Unable to chdir to /...\n");
-            exit(-1);
-        }
+        root_path = strdup("/");
     }
-    else if (tnfs_setroot(argv[optind]) < 0)
+    else
     {
-    #else
-    if(tnfs_setroot(argv[optind]) < 0)
-    {
-    #endif
-		LOG("Invalid root directory\n");
-		exit(-1);
-	}
-
-    #ifdef ENABLE_CHROOT
+        root_path = argv[optind];
+    }
     warn_if_root();
+    #else
+    root_path = argv[optind];
     #endif
 
     int port = TNFSD_PORT;
@@ -142,24 +132,9 @@ int main(int argc, char **argv)
         }
     }
 
-	const char *version = "24.0522.1";
-
-	LOG("Starting tnfsd version %s on port %d using root directory \"%s\"\n", version, port, argv[optind]);
-    if (read_only)
-    {
-        LOG("The server runs in read-only mode. TNFS clients can only list and download files.\n");
-    }
-    else
-    {
-        LOG("The server runs in read-write mode. TNFS clients can upload and modify files. Use -r to enable read-only mode.\n");
-    }
-
-	tnfs_init();              /* initialize structures etc. */
-	tnfs_init_errtable();     /* initialize error lookup table */
-	tnfs_event_init();        /* initialize event system */
-	tnfs_sockinit(port);      /* initialize communications */
-	auth_init(read_only);     /* initialize authentication */
-	tnfs_mainloop();          /* run */
+    tnfsd_init();
+    signal(SIGINT, tnfsd_stop);
+    tnfsd_start(root_path, port, read_only);
 
 	return 0;
 }

@@ -43,7 +43,7 @@
 #define TNFS_DIRSTATUS_EOF 0x01
 
 /* initialize and set the root dir */
-int tnfs_setroot(char *rootdir);
+int tnfs_setroot(const char *rootdir);
 
 /* validates a path points to an actual directory */
 int validate_dir(Session *s, const char *path);
