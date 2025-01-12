@@ -47,10 +47,7 @@ void TNFSMSGLOG(Header *hdr, const char *msg, ...)
 	va_end(vargs);
 
 	fprintf(output, "%d.%d.%d.%d s=%02x c=%02x q=%02x | %s\n", ip[0], ip[1], ip[2], ip[3], hdr->sid, hdr->cmd, hdr->seqno, buff);
-
-#ifdef WIN32
 	fflush(output);
-#endif
 }
 
 void USGLOG(Header *hdr, const char *msg, ...)
@@ -74,10 +71,7 @@ void USGLOG(Header *hdr, const char *msg, ...)
 	va_end(vargs);
 
 	fprintf(output, "%s|%d.%d.%d.%d|SID=%02x|%s\n", sdate, ip[0], ip[1], ip[2], ip[3], hdr->sid, buff);
-
-#ifdef WIN32
 	fflush(output);
-#endif
 }
 
 void MSGLOG(in_addr_t ipaddr, const char *msg, ...)
@@ -94,10 +88,7 @@ void MSGLOG(in_addr_t ipaddr, const char *msg, ...)
 	va_end(vargs);
 
 	fprintf(output, "%d.%d.%d.%d | %s\n", ip[0], ip[1], ip[2], ip[3], buff);
-
-#ifdef WIN32
 	fflush(output);
-#endif
 }
 
 void LOG(const char *msg, ...)
@@ -109,10 +100,7 @@ void LOG(const char *msg, ...)
 
 	vfprintf(output, msg, vargs);
 	va_end(vargs);
-
-#ifdef WIN32
 	fflush(output);
-#endif
 }
 
 void log_time() {
