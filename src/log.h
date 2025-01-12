@@ -26,12 +26,11 @@
  *
  * */
 #include <stdarg.h>
+#include <stdio.h>
 
 #include "tnfs.h"
 
-/* Log a message and exit */
-void die(const char *msg);
-
+void log_init(FILE *file);
 void TNFSMSGLOG(Header *hdr, const char *msg, ...);
 void USGLOG(Header *hdr, const char *msg, ...);
 void MSGLOG(in_addr_t ipaddr, const char *msg, ...);

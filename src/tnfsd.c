@@ -1,8 +1,11 @@
+#include <stdio.h>
+
 #include "auth.h"
 #include "datagram.h"
 #include "directory.h"
 #include "errortable.h"
 #include "event.h"
+#include "log.h"
 #include "version.h"
 #include "tnfsd.h"
 
@@ -10,6 +13,12 @@ void tnfsd_init()
 {
 	tnfs_init();              /* initialize structures etc. */
 	tnfs_init_errtable();     /* initialize error lookup table */
+}
+
+void tnfsd_init_logs(int log_output_fd)
+{
+    FILE* log_output = fdopen(log_output_fd, "w");
+    log_init(log_output);
 }
 
 int tnfsd_start(const char* path, int port, bool read_only)

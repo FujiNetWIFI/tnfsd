@@ -202,6 +202,11 @@ Session *tnfs_allocsession(int *sindex, uint16_t withSid)
 				else
 				{
 					s->sid = tnfs_newsid();
+					if (s->sid == 0)
+					{
+						LOG("Can't allocate session");
+						return NULL;
+					}
 				}
 				LOG("Allocated new session for 0x%02x\n", s->sid);
 				slist[*sindex] = s;
@@ -358,7 +363,7 @@ uint16_t tnfs_newsid()
 		if (!tnfs_findsession_sid(newsid, &sindex))
 			return newsid;
 	}
-	die("Tried to find a new SID 256 times. (Broken PRNG)");
+	LOG("Tried to find a new SID 256 times. (Broken PRNG)");
 	return 0;
 }
 

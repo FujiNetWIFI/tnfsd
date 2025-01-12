@@ -133,6 +133,7 @@ int main(int argc, char **argv)
     }
 
     tnfsd_init();
+    tnfsd_init_logs(STDERR_FILENO);
     signal(SIGINT, tnfsd_stop);
     tnfsd_start(root_path, port, read_only);
 

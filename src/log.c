@@ -24,21 +24,14 @@
  *
  * */
 
-#include <stdio.h>
 #include <time.h>
 #include <stdlib.h>
-#include <stdarg.h>
 #include <sys/types.h>
 
 #include "log.h"
 #include "tnfs.h"
 
-void die(const char *msg)
-{
-	log_time();
-	fprintf(stderr, "%s\n", msg);
-	exit(-1);
-}
+FILE *output;
 
 void TNFSMSGLOG(Header *hdr, const char *msg, ...)
 {
@@ -53,10 +46,10 @@ void TNFSMSGLOG(Header *hdr, const char *msg, ...)
 	vsnprintf(buff, sizeof(buff), msg, vargs);
 	va_end(vargs);
 
-	fprintf(stderr, "%d.%d.%d.%d s=%02x c=%02x q=%02x | %s\n", ip[0], ip[1], ip[2], ip[3], hdr->sid, hdr->cmd, hdr->seqno, buff);
+	fprintf(output, "%d.%d.%d.%d s=%02x c=%02x q=%02x | %s\n", ip[0], ip[1], ip[2], ip[3], hdr->sid, hdr->cmd, hdr->seqno, buff);
 
 #ifdef WIN32
-	fflush(stderr);
+	fflush(output);
 #endif
 }
 
@@ -80,10 +73,10 @@ void USGLOG(Header *hdr, const char *msg, ...)
 	vsnprintf(buff, sizeof(buff), msg, vargs);
 	va_end(vargs);
 
-	fprintf(stderr, "%s|%d.%d.%d.%d|SID=%02x|%s\n", sdate, ip[0], ip[1], ip[2], ip[3], hdr->sid, buff);
+	fprintf(output, "%s|%d.%d.%d.%d|SID=%02x|%s\n", sdate, ip[0], ip[1], ip[2], ip[3], hdr->sid, buff);
 
 #ifdef WIN32
-	fflush(stderr);
+	fflush(output);
 #endif
 }
 
@@ -100,10 +93,10 @@ void MSGLOG(in_addr_t ipaddr, const char *msg, ...)
 	vsnprintf(buff, sizeof(buff), msg, vargs);
 	va_end(vargs);
 
-	fprintf(stderr, "%d.%d.%d.%d | %s\n", ip[0], ip[1], ip[2], ip[3], buff);
+	fprintf(output, "%d.%d.%d.%d | %s\n", ip[0], ip[1], ip[2], ip[3], buff);
 
 #ifdef WIN32
-	fflush(stderr);
+	fflush(output);
 #endif
 }
 
@@ -114,11 +107,11 @@ void LOG(const char *msg, ...)
 	va_list vargs;
 	va_start(vargs, msg);
 
-	vfprintf(stderr, msg, vargs);
+	vfprintf(output, msg, vargs);
 	va_end(vargs);
 
 #ifdef WIN32
-	fflush(stderr);
+	fflush(output);
 #endif
 }
 
@@ -129,16 +122,21 @@ void log_time() {
     time(&now);
     gmt = gmtime(&now);
     if (gmt == NULL) {
-        fprintf(stderr, "Failed to convert time to GMT.\n");
+        fprintf(output, "Failed to convert time to GMT.\n");
         return;
     }
 
     char formatted_time[sizeof "2011-10-08T07:07:09Z"];
     // Replace %F and %T with equivalents for broader compatibility (wasn't working in MinGW)
     if (strftime(formatted_time, sizeof formatted_time, "%Y-%m-%dT%H:%M:%SZ", gmt) == 0) {
-        fprintf(stderr, "[??] ");
+        fprintf(output, "[??] ");
         return;
     }
 
-    fprintf(stderr, "[%s] ", formatted_time);
+    fprintf(output, "[%s] ", formatted_time);
+}
+
+void log_init(FILE *log_output)
+{
+	output = log_output;
 }

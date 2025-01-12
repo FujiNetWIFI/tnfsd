@@ -567,7 +567,8 @@ void tnfs_send(Session *sess, Header *hdr, unsigned char *msg, int msgsz)
 	// TNFS_HEADERSZ + statuscode + msg
 	if (TNFS_HEADERSZ + 1 + msgsz > MAXMSGSZ)
 	{
-		die("tnfs_send: Message too big");
+		LOG("tnfs_send: Message too big");
+		return;
 	}
 
 	cliaddr.sin_family = AF_INET;
