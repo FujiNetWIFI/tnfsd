@@ -22,7 +22,7 @@ bool tnfs_event_register(int fd)
 {
     struct epoll_event ev;
     ev.events = EPOLLIN | EPOLLET | EPOLLRDHUP;
-	ev.data.fd = fd;
+    ev.data.fd = fd;
 
     if (epoll_ctl(epfd, EPOLL_CTL_ADD, fd, &ev) == -1)
     {

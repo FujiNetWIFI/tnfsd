@@ -107,7 +107,7 @@ int main(int argc, char **argv)
             LOG("chroot group required\n");
             exit(-1);
         }
-	    LOG("tnfsd will be jailed at %s\n", argv[optind]);
+        LOG("tnfsd will be jailed at %s\n", argv[optind]);
         chroot_tnfs(uvalue, gvalue, argv[optind]);
         root_path = strdup("/");
     }
@@ -137,5 +137,5 @@ int main(int argc, char **argv)
     signal(SIGINT, tnfsd_stop);
     tnfsd_start(root_path, port, read_only);
 
-	return 0;
+    return 0;
 }
