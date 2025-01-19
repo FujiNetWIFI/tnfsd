@@ -185,7 +185,7 @@ int tnfs_sockinit(int port)
 	}
    int ka_idle = TCP_KA_IDLE;
 #ifdef BSD 
-	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPALIVE, &ka_idle, sizeof(ka_idle)) < 0)
+	if (setsockopt(tcplistenfd, IPPROTO_TCP, SO_KEEPALIVE, &ka_idle, sizeof(ka_idle)) < 0)
 #else
 	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPIDLE, &ka_idle, sizeof(ka_idle)) < 0)
 #endif

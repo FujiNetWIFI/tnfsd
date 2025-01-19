@@ -33,6 +33,7 @@
 
 #ifdef UNIX
 #include <arpa/inet.h>
+#include <netinet/in.h>
 #endif
 #ifdef WIN32
 #include <windows.h>
