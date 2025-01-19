@@ -39,6 +39,8 @@
  * with putting it in a .h file */
 int main(int argc, char **argv);
 
+void print_usage();
+
 int main(int argc, char **argv)
 {
     int opt;
@@ -50,48 +52,57 @@ int main(int argc, char **argv)
     char *pvalue = NULL;
     char *root_path = NULL;
 
-    if(argc >= 2)
+    #ifdef ENABLE_CHROOT
+    while((opt = getopt(argc, argv, "ru:g:p:")) != -1)
+    #else
+    while((opt = getopt(argc, argv, "rp:")) != -1)
+    #endif
     {
-        #ifdef ENABLE_CHROOT
-        while((opt = getopt(argc, argv, "ru:g:p:")) != -1)
-        #else
-        while((opt = getopt(argc, argv, "rp:")) != -1)
-        #endif
+        switch(opt)
         {
-            switch(opt)
-            {
-
-                case 'p':
-                    pvalue = optarg;
-                    break;
-                case 'r':
-                    read_only = true;
-                    break;
-                #ifdef ENABLE_CHROOT
-                case 'u':
-                    uvalue = optarg;
-                    break;
-                case 'g':
-                    gvalue = optarg;
-                    break;
-                #endif
-                case ':':
-                    LOG("option needs a value\n");
-                    break;
-                case '?':
-                    LOG("unknown option: %c\n", optopt);
-                    break;
-            }
+            case 'p':
+                pvalue = optarg;
+                break;
+            case 'r':
+                read_only = true;
+                break;
+            #ifdef ENABLE_CHROOT
+            case 'u':
+                uvalue = optarg;
+                break;
+            case 'g':
+                gvalue = optarg;
+                break;
+            #endif
+            case ':':
+                fprintf(stderr, "option needs a value\n");
+                print_usage();
+                exit(-1);
+                break;
+            default:
+            case '?':
+                fprintf(stderr, "unknown option: %c\n", optopt);
+                print_usage();
+                exit(-1);
+                break;
         }
     }
-    else
+
+    if (optind < argc)
     {
-    #ifdef ENABLE_CHROOT
-    LOG("Usage: tnfsd <root dir> [-u <username> -g <group> -p <port> -r]\n");
-    #else
-    LOG("Usage: tnfsd <root dir> [-p <port> -r]\n");
-    #endif
-    exit(-1);
+        root_path = argv[optind++];
+    }
+    if (optind < argc)
+    {
+        fprintf(stderr, "parameters after the root dir %s are not allowed\n", root_path);
+        print_usage();
+        exit(-1);
+    }
+    if (root_path == NULL)
+    {
+        fprintf(stderr, "please specify root dir\n");
+        print_usage();
+        exit(-1);
     }
 
     #ifdef ENABLE_CHROOT
@@ -100,24 +111,18 @@ int main(int argc, char **argv)
         /* chroot into the specified directory and drop privs */
         if (uvalue == NULL)
         {
-            LOG("chroot username required\n");
+            fprintf(stderr, "chroot username required\n");
             exit(-1);
         } else if (gvalue == NULL)
         {
-            LOG("chroot group required\n");
+            fprintf(stderr, "chroot group required\n");
             exit(-1);
         }
-        LOG("tnfsd will be jailed at %s\n", argv[optind]);
-        chroot_tnfs(uvalue, gvalue, argv[optind]);
+        fprintf(stderr, "tnfsd will be jailed at %s\n", root_path);
+        chroot_tnfs(uvalue, gvalue, root_path);
         root_path = strdup("/");
     }
-    else
-    {
-        root_path = argv[optind];
-    }
     warn_if_root();
-    #else
-    root_path = argv[optind];
     #endif
 
     int port = TNFSD_PORT;
@@ -127,7 +132,7 @@ int main(int argc, char **argv)
         port = atoi(pvalue);
         if (port < 1 || port > 65535)
         {
-            LOG("Invalid port\n");
+            fprintf(stderr, "Invalid port\n");
             exit(-1);
         }
     }
@@ -138,4 +143,13 @@ int main(int argc, char **argv)
     tnfsd_start(root_path, port, read_only);
 
     return 0;
+}
+
+void print_usage()
+{
+    #ifdef ENABLE_CHROOT
+    fprintf(stderr, "Usage: tnfsd [-u <username> -g <group> -p <port> -r] <root dir>\n");
+    #else
+    fprintf(stderr, "Usage: tnfsd [-p <port> -r] <root dir>\n");
+    #endif
 }
