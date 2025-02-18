@@ -28,6 +28,7 @@
  * */
 
 #include <stdint.h>
+#include <stdbool.h>
 #include <dirent.h>
 #include <time.h>
 
@@ -114,6 +115,7 @@ typedef directory_entry_list_node * directory_entry_list;
 typedef struct _dir_handle
 {
 	DIR *handle;
+	bool loaded;
 	char path[MAX_TNFSPATH];
 	uint16_t entry_count;
 	directory_entry_list entry_list;

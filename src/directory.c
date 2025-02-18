@@ -45,6 +45,8 @@
 #include "endian.h"
 #include "log.h"
 #include "fileinfo.h"
+#include "traverse.h"
+#include "match.h"
 
 #ifdef TNFS_DIR_EXT
 #include <stdint.h>
@@ -306,7 +308,7 @@ void tnfs_opendir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	/* find the first available slot in the session */
 	for (i = 0; i < MAX_DHND_PER_CONN; i++)
 	{
-		if (s->dhandles[i].handle == NULL)
+		if (!s->dhandles[i].loaded)
 		{
 #ifdef TNFS_DIR_EXT
 			/* extract options from databuf if present at eos; truncates databuf */
@@ -366,6 +368,7 @@ void tnfs_opendir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 			if ((dptr = opendir(s->dhandles[i].path)) != NULL)
 			{
 				s->dhandles[i].handle = dptr;
+				s->dhandles[i].loaded = true;
 #endif
 				/* send OK response */
 				hdr->status = TNFS_SUCCESS;
@@ -396,7 +399,7 @@ void tnfs_readdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 
 	if (datasz != 1 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		s->dhandles[*databuf].handle == NULL)
+		!s->dhandles[*databuf].loaded)
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -443,7 +446,7 @@ void tnfs_closedir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 {
 	if (datasz != 1 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		s->dhandles[*databuf].handle == NULL)
+		!s->dhandles[*databuf].loaded)
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -461,7 +464,10 @@ void tnfs_closedir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	if(handle->wildcard) free(handle->wildcard);
 	free(handle);
 #else
-	closedir(s->dhandles[*databuf].handle);
+	if (s->dhandles[*databuf].handle != NULL)
+	{
+		closedir(s->dhandles[*databuf].handle);
+	}
 #endif
 
 	s->dhandles[*databuf].handle = NULL;
@@ -469,6 +475,7 @@ void tnfs_closedir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	dirlist_free(s->dhandles[*databuf].entry_list);
 	s->dhandles[*databuf].current_entry = s->dhandles[*databuf].entry_list = NULL;
 	s->dhandles[*databuf].entry_count = 0;
+	s->dhandles[*databuf].loaded = false;
 
 	hdr->status = TNFS_SUCCESS;
 	tnfs_send(s, hdr, NULL, 0);
@@ -534,7 +541,8 @@ void tnfs_seekdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	// followed by 4 bytes for the new position
 	if (datasz != 5 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		s->dhandles[*databuf].handle == NULL)
+		!s->dhandles[*databuf].loaded ||
+		(s->dhandles[*databuf].handle == NULL && s->dhandles[*databuf].entry_list == NULL))
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -576,7 +584,8 @@ void tnfs_telldir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	// databuf holds our directory handle: check it
 	if (datasz != 1 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		s->dhandles[*databuf].handle == NULL)
+		!s->dhandles[*databuf].loaded ||
+		(s->dhandles[*databuf].handle == NULL && s->dhandles[*databuf].entry_list == NULL))
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -622,8 +631,7 @@ void tnfs_readdirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	uint8_t sid;
 	// databuf holds our directory handle followed by number of entries requested
 	if (datasz != 2 ||
-		(sid = databuf[0]) > MAX_DHND_PER_CONN ||
-		s->dhandles[sid].handle == NULL)
+		(sid = databuf[0]) > MAX_DHND_PER_CONN)
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -734,7 +742,7 @@ void tnfs_readdirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 }
 
 // Returns false if pattern doesn't match, otherwise true
-bool _pattern_match(const char *src, const char *pattern)
+bool _pattern_match(const char *src, const char *pattern, bool ignore_case)
 {
 	if (src == NULL || pattern == NULL)
 		return false;
@@ -781,7 +789,7 @@ bool _pattern_match(const char *src, const char *pattern)
 			// (b) characters actually match (case insensitive)
 			} else if (pattern[j - 1] == '?' ||
 				 (src[i - 1] == pattern[j - 1]) ||
-				 (tolower(src[i - 1]) == tolower(pattern[j - 1])))
+				 (_case(src[i - 1], ignore_case) == _case(pattern[j - 1], ignore_case)))
 			{
 				lookup[i][j] = lookup[i - 1][j - 1];
 			}
@@ -804,6 +812,7 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 	struct dirent *entry;
 	char statpath[MAX_TNFSPATH];
 	char temp_statpath[MAX_TNFSPATH*2 + 4];
+	bool ignore_case = (diropts & TNFS_DIROPT_IGNORE_CASE) != 0;
 
 	// Free any existing entries
 	dirlist_free(dirh->entry_list);
@@ -831,7 +840,7 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 				Ignore the directory qualification if TNFS_DIROPT_DIR_PATTERN is set */
 			if ((diropts & TNFS_DIROPT_DIR_PATTERN) || !(finf.flags & FILEINFOFLAG_DIRECTORY))
 			{
-				if (pattern != NULL && _pattern_match(entry->d_name, pattern) == false)
+				if (pattern != NULL && _pattern_match(entry->d_name, pattern, ignore_case) == false)
 					continue;
 			}
 
@@ -841,6 +850,9 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 
 			// Skip this if it's special (assuming TNFS_DIROPT_NO_SKIPSPECIAL isn't set)
 			if (!(diropts & TNFS_DIROPT_NO_SKIPSPECIAL) && (finf.flags & FILEINFOFLAG_SPECIAL))
+				continue;
+
+			if ((diropts & TNFS_DIROPT_NO_FOLDERS) && (finf.flags & FILEINFOFLAG_DIRECTORY))
 				continue;
 
 			// Create a new directory_entry_node to add to our list
@@ -901,6 +913,7 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 #endif
 
 	dirh->current_entry = dirh->entry_list;
+	dirh->loaded = true;
 
 	return 0;
 }
@@ -960,7 +973,7 @@ void tnfs_opendirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	/* find the first available slot in the session */
 	for (i = 0; i < MAX_DHND_PER_CONN; i++)
 	{
-		if (s->dhandles[i].handle == NULL)
+		if (!s->dhandles[i].loaded)
 		{
 			snprintf(path, sizeof(path), "%s/%s/%s",
 					 root, s->root, pDirpath);
@@ -972,7 +985,14 @@ void tnfs_opendirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 			if (!validate_path(s, s->dhandles[i].path))
 				strcpy(s->dhandles[i].path, root);
 
-			result = _load_directory(&(s->dhandles[i]), diropts, sortopts, maxresults, pPattern);
+			if (diropts & TNFS_DIROPT_TRAVERSE)
+			{
+				result = _traverse_directory(&(s->dhandles[i]), diropts, sortopts, maxresults, pPattern);
+			}
+			else
+			{
+				result = _load_directory(&(s->dhandles[i]), diropts, sortopts, maxresults, pPattern);
+			}
 			if (result == 0)
 			{
 				/* send OK response */

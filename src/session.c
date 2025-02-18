@@ -235,10 +235,11 @@ void tnfs_freesession(Session *s, int sindex)
 	}
 	for (i = 0; i < MAX_DHND_PER_CONN; i++)
 	{
-		if (s->dhandles[i].handle)
+		if (s->dhandles[i].loaded && s->dhandles[i].handle != NULL)
 			closedir(s->dhandles[i].handle);
 		dirlist_free(s->dhandles[i].entry_list);
 		s->dhandles[i].entry_count = 0;
+		s->dhandles[i].loaded = false;
 	}
 	free(s);
 	slist[sindex] = NULL;

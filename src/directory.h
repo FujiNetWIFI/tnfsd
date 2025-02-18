@@ -33,6 +33,9 @@
 #define TNFS_DIROPT_NO_SKIPHIDDEN 0x02
 #define TNFS_DIROPT_NO_SKIPSPECIAL 0x04
 #define TNFS_DIROPT_DIR_PATTERN 0x08
+#define TNFS_DIROPT_TRAVERSE 0x10
+#define TNFS_DIROPT_IGNORE_CASE 0x20
+#define TNFS_DIROPT_NO_FOLDERS 0x40
 
 #define TNFS_DIRSORT_NONE 0x01
 #define TNFS_DIRSORT_CASE 0x02
@@ -58,6 +61,7 @@ void dirlist_push(directory_entry_list *dlist, directory_entry_list_node *node);
 directory_entry_list_node * dirlist_get_node_at_index(directory_entry_list dlist, uint32_t index);
 uint32_t dirlist_get_index_for_node(directory_entry_list dlist, directory_entry_list_node *node);
 void dirlist_sort(directory_entry_list *dlist, uint8_t sortopts);
+directory_entry_list dirlist_concat(directory_entry_list list1, directory_entry_list list2);
 
 /* open, read, close directories */
 void tnfs_opendir(Header *hdr, Session *s, unsigned char *databuf, int datasz);
