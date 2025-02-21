@@ -109,6 +109,10 @@ static unsigned next_prime(unsigned seed) {
 
 directory_entry_list dirlist_concat(directory_entry_list list1, directory_entry_list list2);
 
+void _tnfs_free_dir_handle(dir_handle* dhandle);
+
+int _tnfs_find_free_dir_handle(Session *s, const char *path, uint8_t diropt, uint8_t sortopt, const char *pattern, bool reuse);
+
 char root[MAX_ROOT]; /* root for all operations */
 char realroot[MAX_ROOT]; /* full path of the tnfs root dir */
 char dirbuf[MAX_FILEPATH];
@@ -287,6 +291,7 @@ void tnfs_opendir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 {
 	DIR *dptr;
 	char path[MAX_TNFSPATH];
+	char normalized_path[MAX_TNFSPATH];
 	unsigned char reply[2];
 	int i;
 
@@ -305,85 +310,82 @@ void tnfs_opendir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	fprintf(stderr, "opendir: %s\n", databuf);
 #endif
 
+	snprintf(path, MAX_TNFSPATH, "%s/%s/%s", root, s->root, databuf);
+	normalize_path(normalized_path, path, MAX_TNFSPATH);
+
+	/* set path to root if requested path is outside tnfs root */
+	if (!validate_path(s, normalized_path))
+		strcpy(normalized_path, root);
+
 	/* find the first available slot in the session */
-	for (i = 0; i < MAX_DHND_PER_CONN; i++)
+	i = _tnfs_find_free_dir_handle(s, normalized_path, 0, 0, NULL, false);
+	if (i >= 0)
 	{
-		if (!s->dhandles[i].loaded)
-		{
 #ifdef TNFS_DIR_EXT
-			/* extract options from databuf if present at eos; truncates databuf */
-			char *options = (char*)strrchr((const char *)databuf,';');
-			if(options) *options++ = '\0';
+		/* extract options from databuf if present at eos; truncates databuf */
+		char *options = (char*)strrchr((const char *)databuf,';');
+		if(options) *options++ = '\0';
 
-			/* extract wildcard mask from path; extra work needed if /enclosed/ in a path; truncates databuf */
-			char *mask = 0;
-			if(strchr((const char *)databuf,'*') || strchr((const char*)databuf,'?')) {
-				mask = strrchr((const char*)databuf,'/');
-				if(mask) *mask = '\0', mask = strdup(mask+1);
-				else mask = strdup((const char *)databuf), databuf[0] = 0;
-			}
-
-			/* build & normalize path */
-			snprintf(path, MAX_TNFSPATH, "%s/%s/%s",
-					 root, s->root, databuf);
-			normalize_path(s->dhandles[i].path, path, MAX_TNFSPATH);
-
-			/* set path to root if requested path is outside tnfs root */
-			if (!validate_path(s, s->dhandles[i].path))
-				strcpy(s->dhandles[i].path, root);
-
-			/* scan directory */
-			struct dirent **namelist;
-			int n = scandir(s->dhandles[i].path, &namelist, NULL, alphacase_sort);
-			if(n>=0)
-			{
-				/* allocate iteration structure and options */
-				struct tnfs_opendir_ext *handle = calloc(1, sizeof(struct tnfs_opendir_ext));
-				handle->do_uppercase = options ? !!strchr(options,'u') : 0;
-				handle->do_lowercase = options ? !!strchr(options,'l') : 0;
-				handle->do_camelcase = options ? !!strchr(options,'c') : 0;
-				handle->do_exclude_dirs = options ? !!strchr(options,'d') : 0;
-				handle->do_exclude_files = options ? !!strchr(options,'f') : 0;
-				handle->do_exclude_sysnames = options ? !!strchr(options,'x') : 0;
-				handle->do_reverse_list = options ? !!strchr(options,'r') : 0;
-				handle->do_shuffle_list = options ? !!strchr(options,'s') : 0;
-				handle->seed = handle->do_shuffle_list ? strchr(options,'s')[1] : 123u;
-				handle->at = handle->do_shuffle_list ? ((unsigned)rng(&handle->seed) * 100000) % (n-1) : (handle->do_reverse_list ? n - 1 : 0);
-				handle->inc = handle->do_shuffle_list ? next_prime(n+(handle->seed&0xff)*7) : (handle->do_reverse_list ? -1 : 1);
-				handle->visited = 0;
-				handle->total = n;
-				handle->namelist = namelist;
-				handle->wildcard = mask;
-
-				s->dhandles[i].handle = (void*)handle;
-#else
-			snprintf(path, MAX_TNFSPATH, "%s/%s/%s",
-					 root, s->root, databuf);
-			normalize_path(s->dhandles[i].path, path, MAX_TNFSPATH);
-
-			/* set path to root if requested path is outside tnfs root */
-			if (!validate_path(s, s->dhandles[i].path))
-				strcpy(s->dhandles[i].path, root);
-
-			if ((dptr = opendir(s->dhandles[i].path)) != NULL)
-			{
-				s->dhandles[i].handle = dptr;
-				s->dhandles[i].loaded = true;
-#endif
-				/* send OK response */
-				hdr->status = TNFS_SUCCESS;
-				reply[0] = (unsigned char)i;
-				tnfs_send(s, hdr, reply, 1);
-			}
-			else
-			{
-				hdr->status = tnfs_error(errno);
-				tnfs_send(s, hdr, NULL, 0);
-			}
-
-			/* done what is needed, return */
-			return;
+		/* extract wildcard mask from path; extra work needed if /enclosed/ in a path; truncates databuf */
+		char *mask = 0;
+		if(strchr((const char *)databuf,'*') || strchr((const char*)databuf,'?')) {
+			mask = strrchr((const char*)databuf,'/');
+			if(mask) *mask = '\0', mask = strdup(mask+1);
+			else mask = strdup((const char *)databuf), databuf[0] = 0;
 		}
+
+		/* build & normalize path */
+		snprintf(path, MAX_TNFSPATH, "%s/%s/%s",
+					root, s->root, databuf);
+		normalize_path(s->dhandles[i].path, path, MAX_TNFSPATH);
+
+		/* set path to root if requested path is outside tnfs root */
+		if (!validate_path(s, s->dhandles[i].path))
+			strcpy(s->dhandles[i].path, root);
+
+		/* scan directory */
+		struct dirent **namelist;
+		int n = scandir(s->dhandles[i].path, &namelist, NULL, alphacase_sort);
+		if(n>=0)
+		{
+			/* allocate iteration structure and options */
+			struct tnfs_opendir_ext *handle = calloc(1, sizeof(struct tnfs_opendir_ext));
+			handle->do_uppercase = options ? !!strchr(options,'u') : 0;
+			handle->do_lowercase = options ? !!strchr(options,'l') : 0;
+			handle->do_camelcase = options ? !!strchr(options,'c') : 0;
+			handle->do_exclude_dirs = options ? !!strchr(options,'d') : 0;
+			handle->do_exclude_files = options ? !!strchr(options,'f') : 0;
+			handle->do_exclude_sysnames = options ? !!strchr(options,'x') : 0;
+			handle->do_reverse_list = options ? !!strchr(options,'r') : 0;
+			handle->do_shuffle_list = options ? !!strchr(options,'s') : 0;
+			handle->seed = handle->do_shuffle_list ? strchr(options,'s')[1] : 123u;
+			handle->at = handle->do_shuffle_list ? ((unsigned)rng(&handle->seed) * 100000) % (n-1) : (handle->do_reverse_list ? n - 1 : 0);
+			handle->inc = handle->do_shuffle_list ? next_prime(n+(handle->seed&0xff)*7) : (handle->do_reverse_list ? -1 : 1);
+			handle->visited = 0;
+			handle->total = n;
+			handle->namelist = namelist;
+			handle->wildcard = mask;
+
+			s->dhandles[i].handle = (void*)handle;
+#else
+		if ((dptr = opendir(s->dhandles[i].path)) != NULL)
+		{
+			s->dhandles[i].handle = dptr;
+			s->dhandles[i].open = true;
+#endif
+			/* send OK response */
+			hdr->status = TNFS_SUCCESS;
+			reply[0] = (unsigned char)i;
+			tnfs_send(s, hdr, reply, 1);
+		}
+		else
+		{
+			hdr->status = tnfs_error(errno);
+			tnfs_send(s, hdr, NULL, 0);
+		}
+
+		/* done what is needed, return */
+		return;
 	}
 
 	/* no free handles left */
@@ -399,7 +401,7 @@ void tnfs_readdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 
 	if (datasz != 1 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		!s->dhandles[*databuf].loaded)
+		!s->dhandles[*databuf].open)
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -446,36 +448,14 @@ void tnfs_closedir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 {
 	if (datasz != 1 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		!s->dhandles[*databuf].loaded)
+		!s->dhandles[*databuf].open)
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
 		return;
 	}
 
-#ifdef TNFS_DIR_EXT
-	/* deallocate ext iterator */
-	struct tnfs_opendir_ext *handle = (struct tnfs_opendir_ext*) s->dhandles[*databuf].handle;
-	for(int i = 0; i < handle->total; ++i)
-	{
-		free(handle->namelist[i]);
-	}
-	if(handle->namelist) free(handle->namelist);
-	if(handle->wildcard) free(handle->wildcard);
-	free(handle);
-#else
-	if (s->dhandles[*databuf].handle != NULL)
-	{
-		closedir(s->dhandles[*databuf].handle);
-	}
-#endif
-
-	s->dhandles[*databuf].handle = NULL;
-	s->dhandles[*databuf].path[0] = '\0';
-	dirlist_free(s->dhandles[*databuf].entry_list);
-	s->dhandles[*databuf].current_entry = s->dhandles[*databuf].entry_list = NULL;
-	s->dhandles[*databuf].entry_count = 0;
-	s->dhandles[*databuf].loaded = false;
+	s->dhandles[*databuf].open = false;
 
 	hdr->status = TNFS_SUCCESS;
 	tnfs_send(s, hdr, NULL, 0);
@@ -541,8 +521,8 @@ void tnfs_seekdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	// followed by 4 bytes for the new position
 	if (datasz != 5 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		!s->dhandles[*databuf].loaded ||
-		(s->dhandles[*databuf].handle == NULL && s->dhandles[*databuf].entry_list == NULL))
+		!s->dhandles[*databuf].open ||
+		(s->dhandles[*databuf].entry_list == NULL && s->dhandles[*databuf].handle == NULL))
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -584,8 +564,8 @@ void tnfs_telldir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	// databuf holds our directory handle: check it
 	if (datasz != 1 ||
 		*databuf > MAX_DHND_PER_CONN ||
-		!s->dhandles[*databuf].loaded ||
-		(s->dhandles[*databuf].handle == NULL && s->dhandles[*databuf].entry_list == NULL))
+		!s->dhandles[*databuf].open ||
+		(s->dhandles[*databuf].entry_list == NULL && s->dhandles[*databuf].handle == NULL))
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -912,7 +892,6 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 #endif
 
 	dirh->current_entry = dirh->entry_list;
-	dirh->loaded = true;
 
 	return 0;
 }
@@ -921,6 +900,7 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 void tnfs_opendirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 {
 	char path[MAX_TNFSPATH];
+	char normalized_path[MAX_TNFSPATH];
 	unsigned char reply[3];
 
 	uint8_t diropts;
@@ -969,49 +949,57 @@ void tnfs_opendirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 			diropts, sortopts, maxresults, pPattern ? pPattern : "", pDirpath);
 #endif
 
+	snprintf(path, sizeof(path), "%s/%s/%s", root, s->root, pDirpath);
+
+	// Remove any doubled-up path separators
+	normalize_path(normalized_path, path, MAX_TNFSPATH);
+
+	/* set path to root if requested path is outside tnfs root */
+	if (!validate_path(s, normalized_path))
+		strcpy(normalized_path, root);
+
 	/* find the first available slot in the session */
-	for (i = 0; i < MAX_DHND_PER_CONN; i++)
+	i = _tnfs_find_free_dir_handle(s, normalized_path, diropts, sortopts, pPattern, (diropts & TNFS_DIROPT_TRAVERSE) != 0);
+	if (i >= 0)
 	{
-		if (!s->dhandles[i].loaded)
+		if (diropts & TNFS_DIROPT_TRAVERSE)
 		{
-			snprintf(path, sizeof(path), "%s/%s/%s",
-					 root, s->root, pDirpath);
-
-			// Remove any doubled-up path separators
-			normalize_path(s->dhandles[i].path, path, MAX_TNFSPATH);
-
-			/* set path to root if requested path is outside tnfs root */
-			if (!validate_path(s, s->dhandles[i].path))
-				strcpy(s->dhandles[i].path, root);
-
-			if (diropts & TNFS_DIROPT_TRAVERSE)
+			if (s->dhandles[i].loaded)
+			{
+				// reuse already loaded dir
+				result = 0;
+			}
+			else
 			{
 				result = _traverse_directory(&(s->dhandles[i]), diropts, sortopts, maxresults, pPattern);
 			}
-			else
-			{
-				result = _load_directory(&(s->dhandles[i]), diropts, sortopts, maxresults, pPattern);
-			}
-			if (result == 0)
-			{
-				/* send OK response */
-				hdr->status = TNFS_SUCCESS;
-				#ifdef DEBUG
-				TNFSMSGLOG(hdr, "opendirx response: handle=%hu, count=%hu", i, s->dhandles[i].entry_count);
-				#endif
-				reply[0] = (unsigned char) i;
-				uint16tnfs(reply + 1, s->dhandles[i].entry_count);
-				tnfs_send(s, hdr, reply, 3);
-			}
-			else
-			{
-				hdr->status = tnfs_error(result);
-				tnfs_send(s, hdr, NULL, 0);
-			}
-
-			/* done what is needed, return */
-			return;
 		}
+		else
+		{
+			result = _load_directory(&(s->dhandles[i]), diropts, sortopts, maxresults, pPattern);
+		}
+		if (result == 0)
+		{
+			s->dhandles[i].open = true;
+			s->dhandles[i].loaded = true;
+
+			/* send OK response */
+			hdr->status = TNFS_SUCCESS;
+			#ifdef DEBUG
+			TNFSMSGLOG(hdr, "opendirx response: handle=%hu, count=%hu", i, s->dhandles[i].entry_count);
+			#endif
+			reply[0] = (unsigned char) i;
+			uint16tnfs(reply + 1, s->dhandles[i].entry_count);
+			tnfs_send(s, hdr, reply, 3);
+		}
+		else
+		{
+			hdr->status = tnfs_error(result);
+			tnfs_send(s, hdr, NULL, 0);
+		}
+
+		/* done what is needed, return */
+		return;
 	}
 
 	/* no free handles left */
@@ -1172,4 +1160,128 @@ void _mergesort(directory_entry_list *headP, uint8_t sortopts)
 void dirlist_sort(directory_entry_list *dlist, uint8_t sortopts)
 {
 	_mergesort(dlist, sortopts);
+}
+
+void _tnfs_free_dir_handle(dir_handle* dhandle)
+{
+	#ifdef TNFS_DIR_EXT
+	/* deallocate ext iterator */
+	struct tnfs_opendir_ext *handle = (struct tnfs_opendir_ext*) dhandle->handle;
+	for(int i = 0; i < handle->total; ++i)
+	{
+		free(handle->namelist[i]);
+	}
+	if(handle->namelist) free(handle->namelist);
+	if(handle->wildcard) free(handle->wildcard);
+	free(handle);
+#else
+	if (dhandle->handle != NULL)
+	{
+		closedir(dhandle->handle);
+	}
+#endif
+
+	dhandle->handle = NULL;
+	dhandle->path[0] = '\0';
+	dhandle->pattern[0] = '\0';
+	dirlist_free(dhandle->entry_list);
+	dhandle->current_entry = dhandle->entry_list = NULL;
+	dhandle->entry_count = 0;
+	dhandle->loaded = false;
+}
+
+void _tnfs_init_dhandle(dir_handle* dhandle, const char *path, uint8_t diropt, uint8_t sortopt, const char *pattern)
+{
+	time_t now = time(NULL);
+	strlcpy(dhandle->path, path, MAX_TNFSPATH);
+	if (pattern == NULL)
+	{
+		dhandle->pattern[0] = '\0';
+	}
+	else
+	{
+		strlcpy(dhandle->pattern, pattern, MAX_TNFSPATH);
+	}
+	dhandle->diropt = diropt;
+	dhandle->sortopt = sortopt;
+	dhandle->open_at = now;
+}
+
+int _tnfs_find_free_dir_handle(Session *s, const char *path, uint8_t diropt, uint8_t sortopt, const char *pattern, bool reuse)
+{
+	time_t now = time(NULL);
+
+	// remove old handles
+	for (int i = 0; i < MAX_DHND_PER_CONN; i++)
+	{
+		dir_handle *dhandle = &s->dhandles[i];
+		if (dhandle->open)
+		{
+			continue;
+		}
+		if (dhandle->loaded && now > dhandle->open_at + 60)
+		{
+#ifdef DEBUG
+			fprintf(stderr, "freeing stale handle=%d\n", i);
+#endif
+			_tnfs_free_dir_handle(dhandle);
+		}
+	}
+
+	// attempt 1 - try to reuse handle
+	if (reuse)
+	{
+		for (int i = 0; i < MAX_DHND_PER_CONN; i++)
+		{
+			dir_handle *dhandle = &s->dhandles[i];
+			if (dhandle->loaded
+				&& strncmp(dhandle->path, path, MAX_TNFSPATH) == 0
+				&& dhandle->diropt == diropt
+				&& dhandle->sortopt == sortopt
+				&& ((pattern == NULL && dhandle->pattern[0] == '\0') || strncmp(dhandle->pattern, pattern, MAX_TNFSPATH) == 0))
+			{
+#ifdef DEBUG
+				fprintf(stderr, "reusing dir handle=%d\n", i);
+#endif
+				dhandle->current_entry = dhandle->entry_list;
+				return i;
+			}
+		}
+	}
+
+	// attempt 2 - try to find empty handle
+	for (int i = 0; i < MAX_DHND_PER_CONN; i++)
+	{
+		dir_handle *dhandle = &s->dhandles[i];
+		if (dhandle->open || dhandle->loaded)
+		{
+			continue;
+		}
+#ifdef DEBUG
+		fprintf(stderr, "allocating empty dir handle=%d\n", i);
+#endif
+		_tnfs_init_dhandle(dhandle, path, diropt, sortopt, pattern);
+		return i;
+	}
+
+	// attempt 3 - try to find any available handle
+	for (int i = 0; i < MAX_DHND_PER_CONN; i++)
+	{
+		dir_handle *dhandle = &s->dhandles[i];
+		if (dhandle->open)
+		{
+			continue;
+		}
+#ifdef DEBUG
+		fprintf(stderr, "allocating loaded dir handle=%d\n", i);
+#endif
+		if (dhandle->loaded)
+		{
+			_tnfs_free_dir_handle(dhandle);
+		}
+		_tnfs_init_dhandle(dhandle, path, diropt, sortopt, pattern);
+		return i;
+	}
+
+	return -1;
 }

@@ -115,11 +115,16 @@ typedef directory_entry_list_node * directory_entry_list;
 typedef struct _dir_handle
 {
 	DIR *handle;
+	bool open;
 	bool loaded;
 	char path[MAX_TNFSPATH];
+	uint8_t diropt;
+	uint8_t sortopt;
+	char pattern[MAX_TNFSPATH];
 	uint16_t entry_count;
 	directory_entry_list entry_list;
 	directory_entry_list_node * current_entry;
+	time_t open_at;
 } dir_handle;
 
 typedef struct _session

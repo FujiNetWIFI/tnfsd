@@ -158,7 +158,6 @@ int _traverse_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uin
 #endif
 
 	dirh->current_entry = dirh->entry_list;
-	dirh->loaded = true;
 
 	return 0;
 }
