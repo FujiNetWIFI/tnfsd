@@ -742,7 +742,7 @@ void tnfs_readdirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 }
 
 // Returns false if pattern doesn't match, otherwise true
-bool _pattern_match(const char *src, const char *pattern, bool ignore_case)
+bool _pattern_match(const char *src, const char *pattern)
 {
 	if (src == NULL || pattern == NULL)
 		return false;
@@ -789,7 +789,7 @@ bool _pattern_match(const char *src, const char *pattern, bool ignore_case)
 			// (b) characters actually match (case insensitive)
 			} else if (pattern[j - 1] == '?' ||
 				 (src[i - 1] == pattern[j - 1]) ||
-				 (_case(src[i - 1], ignore_case) == _case(pattern[j - 1], ignore_case)))
+				 (tolower(src[i - 1]) == tolower(pattern[j - 1])))
 			{
 				lookup[i][j] = lookup[i - 1][j - 1];
 			}
@@ -812,7 +812,6 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 	struct dirent *entry;
 	char statpath[MAX_TNFSPATH];
 	char temp_statpath[MAX_TNFSPATH*2 + 4];
-	bool ignore_case = (diropts & TNFS_DIROPT_IGNORE_CASE) != 0;
 
 	// Free any existing entries
 	dirlist_free(dirh->entry_list);
@@ -840,7 +839,7 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 				Ignore the directory qualification if TNFS_DIROPT_DIR_PATTERN is set */
 			if ((diropts & TNFS_DIROPT_DIR_PATTERN) || !(finf.flags & FILEINFOFLAG_DIRECTORY))
 			{
-				if (pattern != NULL && _pattern_match(entry->d_name, pattern, ignore_case) == false)
+				if (pattern != NULL && _pattern_match(entry->d_name, pattern) == false)
 					continue;
 			}
 

@@ -4,8 +4,11 @@
 // set to 1 to enable dotglob: *. ?, and [] match a . (dotfile) at the begin or after each /
 #define DOTGLOB 1
 
-char _case(char c, bool ignore_case);
+// set to 1 to enable case-insensitive glob matching
+#define NOCASEGLOB 1
 
-int gitignore_glob_match(const char *text, const char *glob, bool ignore_case);
+#define CASE(c) (NOCASEGLOB ? tolower(c) : (c))
+
+int gitignore_glob_match(const char *text, const char *glob);
 
 #endif

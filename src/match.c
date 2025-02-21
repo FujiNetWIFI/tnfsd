@@ -6,11 +6,6 @@
 #include "fileinfo.h"
 #include "match.h"
 
-char _case(char c, bool ignore_case)
-{
-  return ignore_case ? tolower(c) : c;
-}
-
 // This function is copied from
 // https://www.codeproject.com/Articles/5163931/Fast-String-Matching-with-Wildcards-Globs-and-Giti
 //
@@ -20,7 +15,7 @@ char _case(char c, bool ignore_case)
 //              https://www.codeproject.com/info/cpol10.aspx
 //
 // returns TRUE if text string matches gitignore-style glob pattern
-int gitignore_glob_match(const char *text, const char *glob, bool ignore_case)
+int gitignore_glob_match(const char *text, const char *glob)
 {
   const char *text1_backup = NULL;
   const char *glob1_backup = NULL;
@@ -98,10 +93,10 @@ int gitignore_glob_match(const char *text, const char *glob, bool ignore_case)
           glob++;
         // match character class
         matched = false;
-        for (lastchr = 256; *++glob != '\0' && *glob != ']'; lastchr = _case(*glob, ignore_case))
+        for (lastchr = 256; *++glob != '\0' && *glob != ']'; lastchr = CASE(*glob))
           if (lastchr < 256 && *glob == '-' && glob[1] != ']' && glob[1] != '\0' ?
-              _case(*text, ignore_case) <= _case(*++glob, ignore_case) && _case(*text, ignore_case) >= lastchr :
-              _case(*text, ignore_case) == _case(*glob, ignore_case))
+              CASE(*text) <= CASE(*++glob) && CASE(*text) >= lastchr :
+              CASE(*text) == CASE(*glob))
             matched = true;
         if (matched == reverse)
           break;
@@ -116,7 +111,7 @@ int gitignore_glob_match(const char *text, const char *glob, bool ignore_case)
         // FALLTHROUGH
       default:
         // match the current non-NUL character
-        if (_case(*glob, ignore_case) != _case(*text, ignore_case) && !(*glob == '/' && *text == FILEINFO_PATHSEPARATOR))
+        if (CASE(*glob) != CASE(*text) && !(*glob == '/' && *text == FILEINFO_PATHSEPARATOR))
           break;
         // do not match a . with *, ? [] after /
         nodot = !DOTGLOB && *glob == '/';

@@ -53,7 +53,7 @@ int _nftwfunc(const char *fullpath, const struct stat *statptr, int fileflags, s
 			Ignore the directory qualification if TNFS_DIROPT_DIR_PATTERN is set */
 		if ((_diropts & TNFS_DIROPT_DIR_PATTERN) || !(finf.flags & FILEINFOFLAG_DIRECTORY))
 		{
-			if (_pattern != NULL && gitignore_glob_match(filename_with_slash, _pattern, _diropts & TNFS_DIROPT_IGNORE_CASE) == false)
+			if (_pattern != NULL && gitignore_glob_match(filename_with_slash, _pattern) == false)
 				return 0;
 		}
 
