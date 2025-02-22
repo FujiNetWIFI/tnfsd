@@ -376,3 +376,14 @@ uint16_t tnfs_session_count()
 	}
 	return count;
 }
+
+void tnfs_free_all_sessions()
+{
+	for (uint16_t i = 0; i < MAX_SESSIONS; i++)
+	{
+		if (slist[i])
+		{
+			tnfs_freesession(slist[i], i);
+		}
+	}
+}

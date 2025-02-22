@@ -240,6 +240,7 @@ void tnfs_sockclose()
 	close(tcplistenfd);
 	close(sockfd);
 #endif
+
 }
 
 void tnfs_mainloop()
@@ -303,6 +304,7 @@ void tnfs_mainloop()
 		}
 	}
 	tnfs_close_all_connections(tcpsocks);
+	tnfs_free_all_sessions();
 }
 
 void tcp_accept(TcpConnection *tcp_conn_list)
