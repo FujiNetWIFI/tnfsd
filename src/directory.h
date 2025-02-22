@@ -76,5 +76,8 @@ void tnfs_readdirx(Header *hdr, Session *s, unsigned char *databuf, int datasz);
 void tnfs_mkdir(Header *hdr, Session *s, unsigned char *databuf, int datasz);
 void tnfs_rmdir(Header *hdr, Session *s, unsigned char *databuf, int datasz);
 
+/* manage dir handle */
+void _tnfs_free_dir_handle(dir_handle* dhandle);
+
 #endif // _TNFS_DIRECTORY_H
 
