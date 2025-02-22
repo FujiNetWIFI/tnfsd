@@ -30,6 +30,7 @@
 #define MAX_TCP_CONN        4096   /* maximum number of TCP connections */
 #define SESSION_TIMEOUT 600 /* Sessions are thrown out after no contact for this many seconds. 0 = no timeout */
 #define CONN_TIMEOUT    600 /* TCP connections are thrown out after no contact for this many seconds. 0 = no timeout */
+#define DIR_HANDLE_TIMEOUT 300 /* How long the traversal dir handles are cached. */
 #define TNFS_HEADERSZ	4	/* minimum header size */
 #define TNFS_MAX_PAYLOAD (MAXMSGSZ - TNFS_HEADERSZ - 1) /* Maximum usuable payload in a UDP datagram (-1 for status byte) */
 #define MAX_TNFSPATH	256	/* maximum path length */

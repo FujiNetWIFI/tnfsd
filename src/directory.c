@@ -1219,7 +1219,7 @@ int _tnfs_find_free_dir_handle(Session *s, const char *path, uint8_t diropt, uin
 		{
 			continue;
 		}
-		if (dhandle->loaded && now > dhandle->open_at + 60)
+		if (dhandle->loaded && now > dhandle->open_at + DIR_HANDLE_TIMEOUT)
 		{
 #ifdef DEBUG
 			fprintf(stderr, "freeing stale handle=%d\n", i);
