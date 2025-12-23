@@ -1,7 +1,17 @@
 CC=gcc
 
+# Auto-detect OS if not provided. Map uname output to expected values.
 ifndef OS
-    $(error Must specify an OS with make OS=... where OS is LINUX, BSD or Windows_NT. Use BSD for macOS)
+    UNAME_S := $(shell uname -s 2>/dev/null)
+    ifeq ($(UNAME_S),Darwin)
+        OS := BSD
+    else ifeq ($(UNAME_S),Linux)
+        OS := LINUX
+    else ifeq ($(UNAME_S),Windows_NT)
+        OS := Windows_NT
+    else
+        $(error Unknown OS. Please run `make OS=LINUX|BSD|Windows_NT`)
+    endif
 endif
 
 ifeq ($(OS),LINUX)
