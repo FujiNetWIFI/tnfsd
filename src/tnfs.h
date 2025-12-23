@@ -32,7 +32,8 @@
 #include <dirent.h>
 #include <time.h>
 
-#ifdef UNIX
+#ifndef WIN32
+#include <sys/socket.h>
 #include <arpa/inet.h>
 #include <netinet/in.h>
 #endif
@@ -78,14 +79,19 @@
 #define TNFS_RENAMEFILE	0x28
 #define TNFS_OPENFILE	0x29
 
+#define TNFS_SIZEDDEVICE 0x30
+#define TNFS_FREEDEVICE  0x31
+
 /* command classes etc. */
 #define CLASS_SESSION	0x00
 #define CLASS_DIRECTORY	0x10
-#define CLASS_FILE	0x20
+#define CLASS_FILE		0x20
+#define CLASS_DEVICE	0x30
 
 #define NUM_SESSCMDS 2
 #define NUM_DIRCMDS	9
 #define NUM_FILECMDS 10
+#define NUM_DEVCMDS 2
 
 #define TNFS_DIRENTRY_DIR 0x01
 #define TNFS_DIRENTRY_HIDDEN 0x02
