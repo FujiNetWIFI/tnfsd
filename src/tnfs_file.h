@@ -62,6 +62,9 @@ void tnfs_unlink(Header *hdr, Session *s, unsigned char *buf, int bufsz);
 void tnfs_chmod(Header *hdr, Session *s, unsigned char *buf, int bufsz);
 void tnfs_rename(Header *hdr, Session *s, unsigned char *buf, int bufsz);
 
+void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz);
+void tnfs_free(Header *hdr, Session *s, unsigned char *buf, int bufsz);
+
 int tnfs_valid_filename(Session *s,
                         char *fullpath,
                         char *filename, int fnsize);

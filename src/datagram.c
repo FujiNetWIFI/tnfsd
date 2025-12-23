@@ -55,8 +55,8 @@ TNFS daemon datagram handler
 #include "event.h"
 #include "auth.h"
 
-int sockfd;         /* UDP global socket file descriptor */
-int tcplistenfd;    /* TCP listening socket file descriptor */
+int sockfd;			/* UDP global socket file descriptor */
+int tcplistenfd;	/* TCP listening socket file descriptor */
 bool write_support; /* Whether writes should be enabled. */
 
 tnfs_cmdfunc dircmd[NUM_DIRCMDS] =
@@ -69,21 +69,25 @@ tnfs_cmdfunc filecmd[NUM_FILECMDS] =
 	 &tnfs_stat, &tnfs_lseek, &tnfs_unlink, &tnfs_chmod, &tnfs_rename,
 	 &tnfs_open};
 
+tnfs_cmdfunc devcmd[NUM_DEVCMDS] =
+	{&tnfs_size, &tnfs_free};
+
 const char *sesscmd_names[NUM_SESSCMDS] =
 	{
 		"TNFS_MOUNT",
 		"TNFS_UMOUNT"};
 
 const char *dircmd_names[NUM_DIRCMDS] =
-	{"TNFS_OPENDIR",
-	 "TNFS_READDIR",
-	 "TNFS_CLOSEDIR",
-	 "TNFS_MKDIR",
-	 "TNFS_RMDIR",
-	 "TNFS_TELLDIR",
-	 "TNFS_SEEKDIR",
-	 "TNFS_OPENDIRX",
-	 "TNFS_READDIRX"};
+	{
+		"TNFS_OPENDIR",
+		"TNFS_READDIR",
+		"TNFS_CLOSEDIR",
+		"TNFS_MKDIR",
+		"TNFS_RMDIR",
+		"TNFS_TELLDIR",
+		"TNFS_SEEKDIR",
+		"TNFS_OPENDIRX",
+		"TNFS_READDIRX"};
 
 const char *filecmd_names[NUM_FILECMDS] =
 	{
@@ -98,27 +102,35 @@ const char *filecmd_names[NUM_FILECMDS] =
 		"TNFS_RENAME",
 		"TNFS_OPEN"};
 
+const char *devcmd_names[NUM_DEVCMDS] =
+	{
+		"TNFS_SIZEDDEVICE",
+		"TNFS_FREEDEVICE"};
+
 const char *get_cmd_name(uint8_t cmd)
 {
 	uint8_t class = cmd & 0xF0;
 	uint8_t index = cmd & 0x0F;
 
-	if(class == CLASS_FILE)
+	if (class == CLASS_FILE)
 	{
-		if(index < NUM_FILECMDS)
+		if (index < NUM_FILECMDS)
 			return filecmd_names[index];
-
 	}
-	else if(class == CLASS_DIRECTORY)
+	else if (class == CLASS_DIRECTORY)
 	{
-		if(index < NUM_DIRCMDS)
+		if (index < NUM_DIRCMDS)
 			return dircmd_names[index];
-
 	}
-	else if(class == CLASS_SESSION)
+	else if (class == CLASS_SESSION)
 	{
-		if(index < NUM_SESSCMDS)
+		if (index < NUM_SESSCMDS)
 			return sesscmd_names[index];
+	}
+	else if (class == CLASS_DEVICE)
+	{
+		if (index < NUM_DEVCMDS)
+			return devcmd_names[index];
 	}
 
 	return "UNKNOWN_CMD";
@@ -175,41 +187,53 @@ int tnfs_sockinit(int port)
 	}
 
 #ifndef WIN32
-   /* enables sending of keep-alive messages */
-   int ka_enable = 1;
+	/* enables sending of keep-alive messages */
+	int ka_enable = 1;
 	if (setsockopt(tcplistenfd, SOL_SOCKET, SO_KEEPALIVE, &ka_enable, sizeof(ka_enable)) < 0)
 	{
 		LOG("setsockopt(SO_KEEPALIVE) failed");
 		tnfs_sockclose();
 		return -1;
 	}
-   int ka_idle = TCP_KA_IDLE;
-#ifdef BSD 
-	if (setsockopt(tcplistenfd, IPPROTO_TCP, SO_KEEPALIVE, &ka_idle, sizeof(ka_idle)) < 0)
-#else
+	int ka_idle = TCP_KA_IDLE;
+#if defined(TCP_KEEPIDLE)
 	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPIDLE, &ka_idle, sizeof(ka_idle)) < 0)
-#endif
 	{
 		LOG("setsockopt(TCP_KEEPIDLE) failed");
 		tnfs_sockclose();
 		return -1;
 	}
+#elif defined(TCP_KEEPALIVE)
+	/* macOS/BSD use TCP_KEEPALIVE to set the idle time (seconds) */
+	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPALIVE, &ka_idle, sizeof(ka_idle)) < 0)
+	{
+		LOG("setsockopt(TCP_KEEPALIVE) failed");
+		tnfs_sockclose();
+		return -1;
+	}
+#else
+	/* no platform support for setting idle timeout; continue */
+#endif
 	/* the time (in seconds) between individual keepalive probes */
 	int ka_interval = TCP_KA_INTVL;
+#ifdef TCP_KEEPINTVL
 	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPINTVL, &ka_interval, sizeof(ka_interval)) < 0)
 	{
 		LOG("setsockopt(TCP_KEEPINTVL) failed");
 		tnfs_sockclose();
 		return -1;
 	}
+#endif
 	/* the maximum number of keepalive probes TCP should send before dropping the connection */
 	int ka_count = TCP_KA_COUNT;
+#ifdef TCP_KEEPCNT
 	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPCNT, &ka_count, sizeof(ka_count)) < 0)
 	{
 		LOG("setsockopt(TCP_KEEPCNT) failed");
 		tnfs_sockclose();
 		return -1;
 	}
+#endif
 #endif
 
 #ifndef WIN32
@@ -240,7 +264,6 @@ void tnfs_sockclose()
 	close(tcplistenfd);
 	close(sockfd);
 #endif
-
 }
 
 void tnfs_mainloop()
@@ -321,7 +344,7 @@ void tcp_accept(TcpConnection *tcp_conn_list)
 	TcpConnection *tcp_conn;
 	LOG("tcp_accept - accepting connection\n");
 
- 	acc_fd = accept(tcplistenfd, (struct sockaddr *)&cliaddr, &cli_len);
+	acc_fd = accept(tcplistenfd, (struct sockaddr *)&cliaddr, &cli_len);
 
 	if (acc_fd < 1)
 	{
@@ -357,7 +380,7 @@ void tcp_accept(TcpConnection *tcp_conn_list)
 	/* tell the client 'too many connections' */
 	unsigned char txbuf[9];
 	uint16tnfs(txbuf, 0); // connID
-	*(txbuf + 2) = 0; 	  // retry
+	*(txbuf + 2) = 0;	  // retry
 	*(txbuf + 3) = 0;	  // command
 	*(txbuf + 4) = 0xFF;  // error
 	*(txbuf + 5) = PROTOVERSION_LSB;
@@ -365,7 +388,6 @@ void tcp_accept(TcpConnection *tcp_conn_list)
 
 	send(acc_fd, (const char *)txbuf, sizeof(txbuf), 0);
 	close(acc_fd);
-
 }
 
 void tnfs_handle_udpmsg()
@@ -407,16 +429,19 @@ void tnfs_handle_tcpmsg(TcpConnection *tcp_conn)
 	sz = recv(tcp_conn->cli_fd, (char *)buf, sizeof(buf), 0);
 
 #ifdef WIN32
-	if (sz == SOCKET_ERROR) {
+	if (sz == SOCKET_ERROR)
+	{
 		LOG("WSAGetLastError() = %d\n", WSAGetLastError());
 	}
 #else
-	if (sz == -1) {
+	if (sz == -1)
+	{
 		LOG("Error: %s\n", strerror(errno));
 	}
 #endif
 
-	if (sz <= 0) {
+	if (sz <= 0)
+	{
 		MSGLOG(tcp_conn->cliaddr.sin_addr.s_addr, "Client disconnected, closing socket.");
 		tnfs_close_tcp(tcp_conn);
 		return;
@@ -426,15 +451,15 @@ void tnfs_handle_tcpmsg(TcpConnection *tcp_conn)
 
 void tnfs_close_tcp(TcpConnection *tcp_conn)
 {
-		tnfs_reset_cli_fd_in_sessions(tcp_conn->cli_fd);
+	tnfs_reset_cli_fd_in_sessions(tcp_conn->cli_fd);
 
 #ifdef WIN32
-		closesocket(tcp_conn->cli_fd);
+	closesocket(tcp_conn->cli_fd);
 #else
-		close(tcp_conn->cli_fd);
+	close(tcp_conn->cli_fd);
 #endif
-		tnfs_event_unregister(tcp_conn->cli_fd);
-		tcp_conn->cli_fd = 0;
+	tnfs_event_unregister(tcp_conn->cli_fd);
+	tcp_conn->cli_fd = 0;
 }
 
 void tnfs_decode(struct sockaddr_in *cliaddr, int cli_fd, int rxbytes, unsigned char *rxbuf)
@@ -597,7 +622,7 @@ void tnfs_send(Session *sess, Header *hdr, unsigned char *msg, int msgsz)
 	}
 	else
 	{
-		txbytes = send(hdr->cli_fd, WIN32_CHAR_P txbuf, msgsz + TNFS_HEADERSZ + 1, 0); 
+		txbytes = send(hdr->cli_fd, WIN32_CHAR_P txbuf, msgsz + TNFS_HEADERSZ + 1, 0);
 	}
 
 	if (txbytes < TNFS_HEADERSZ + 1 + msgsz)
@@ -612,11 +637,11 @@ void tnfs_resend(Session *sess, struct sockaddr_in *cliaddr, int cli_fd)
 	if (cli_fd == 0)
 	{
 		txbytes = sendto(sockfd, WIN32_CHAR_P sess->lastmsg, sess->lastmsgsz, 0,
-						(struct sockaddr *)cliaddr, sizeof(struct sockaddr_in));
+						 (struct sockaddr *)cliaddr, sizeof(struct sockaddr_in));
 	}
 	else
 	{
-		txbytes = send(cli_fd, WIN32_CHAR_P sess->lastmsg, sess->lastmsgsz, 0); 
+		txbytes = send(cli_fd, WIN32_CHAR_P sess->lastmsg, sess->lastmsgsz, 0);
 	}
 	if (txbytes < sess->lastmsgsz)
 	{
