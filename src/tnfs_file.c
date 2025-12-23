@@ -32,6 +32,7 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
+#include <sys/statvfs.h>
 
 #ifdef UNIX
 #include <sys/uio.h>
@@ -379,6 +380,75 @@ void tnfs_rename(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 		tnfs_send(s, hdr, NULL, 0);
 	}
 }
+
+void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz)
+{
+	struct statvfs vfs;
+	unsigned char resp[4];
+#ifdef DEBUG
+	fprintf(stderr, "size: bufsz=%d buf=%s\n", bufsz, buf);
+#endif
+
+	if (bufsz < 2 ||
+		tnfs_valid_filename(s, fnbuf, (char *)buf, bufsz) < 0)
+	{
+		hdr->status = TNFS_EINVAL;
+		tnfs_send(s, hdr, NULL, 0);
+		return;
+	}
+
+	if (statvfs(fnbuf, &vfs) == 0)
+	{
+		unsigned long long total_bytes = (unsigned long long)vfs.f_blocks * (unsigned long long)vfs.f_frsize;
+		unsigned long kb = (unsigned long)(total_bytes / 1024ULL);
+		uint32tnfs(resp, (uint32_t)kb);
+		hdr->status = TNFS_SUCCESS;
+		tnfs_send(s, hdr, resp, sizeof(resp));
+	}
+	else
+	{
+		hdr->status = tnfs_error(errno);
+#ifdef DEBUG
+		fprintf(stderr, "size: statvfs failed errno=%d status=%d\n", errno, hdr->status);
+#endif
+		tnfs_send(s, hdr, NULL, 0);
+	}
+}
+
+void tnfs_free(Header *hdr, Session *s, unsigned char *buf, int bufsz)
+{
+	struct statvfs vfs;
+	unsigned char resp[4];
+#ifdef DEBUG
+	fprintf(stderr, "free: bufsz=%d buf=%s\n", bufsz, buf);
+#endif
+
+	if (bufsz < 2 ||
+		tnfs_valid_filename(s, fnbuf, (char *)buf, bufsz) < 0)
+	{
+		hdr->status = TNFS_EINVAL;
+		tnfs_send(s, hdr, NULL, 0);
+		return;
+	}
+
+	if (statvfs(fnbuf, &vfs) == 0)
+	{
+		unsigned long long free_bytes = (unsigned long long)vfs.f_bavail * (unsigned long long)vfs.f_frsize;
+		unsigned long kb = (unsigned long)(free_bytes / 1024ULL);
+		uint32tnfs(resp, (uint32_t)kb);
+		hdr->status = TNFS_SUCCESS;
+		tnfs_send(s, hdr, resp, sizeof(resp));
+	}
+	else
+	{
+		hdr->status = tnfs_error(errno);
+#ifdef DEBUG
+		fprintf(stderr, "free: statvfs failed errno=%d status=%d\n", errno, hdr->status);
+#endif
+		tnfs_send(s, hdr, NULL, 0);
+	}
+}
+
 
 int tnfs_valid_filename(Session *s,
 						char *fullpath,
