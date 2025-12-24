@@ -74,6 +74,10 @@ for servers to support.
 * SIZE - Get the size of the filesystem *
 * FREE - Get the remaining free space on the filesystem *
 
+Additional device commands (optional):
+* SIZEBYTES - Get the size of the filesystem in bytes (64-bit) - command `0x32`
+* FREEBYTES - Get the remaining free space on the filesystem in bytes (64-bit) - command `0x33`
+
 Note: Not all servers have to support all operations - for example, a server
 on a Spectrum with a microdrive, or +3 floppy won't support
 mkdir/rmdir and will only support limited options for chmod. But
@@ -324,6 +328,18 @@ The default searching and sorting behavior is:
 * Directories sorted before regular files
 * Case-insensitve sort order
 * Wildcard pattern does not apply to directories
+
+Ignore rules (.ignore)
+-----------------------
+
+If a file named `.ignore` exists in the directory being listed, servers will
+load it before applying other filters or wildcard patterns. The file contains
+one filename pattern per line (gitignore-style globs are supported). Blank
+lines and lines beginning with `#` are ignored. Patterns are matched against
+the entry names and any entry that matches any `.ignore` pattern is excluded
+from directory listings returned by `READDIR`, `READDIRX` and by recursive
+traversals (e.g. `OPENDIRX` with traverse). This allows servers to hide
+commonly unwanted files (for example, `.git` or build artifacts) from clients.
 
 The following flags are provided to override these defaults:
 
@@ -966,6 +982,51 @@ There is 64K free:
 Request failed with error 0x1F:
 
     0xBEEF 0x00 0x31 0x1F
+
+
+### SIZEBYTES
+
+> _Requests the size of the mounted filesystem in bytes_  
+> Command `0x32`
+
+The request consists of a standard header and nothing more.
+
+Example:
+
+    0xBEEF 0x00 0x32
+
+The reply is the standard header, followed by the return code, followed
+by a 64 bit little endian unsigned integer which is the size of the filesystem
+in bytes. For example, a filesystem size of 1,234,567,890 bytes (0x00000000499602D2)
+would be returned as:
+
+    0xBEEF 0x00 0x32 0x00 0xD2 0x02 0x96 0x49 0x00 0x00 0x00
+
+Request failed with error code 0xFF:
+
+    0xBEEF 0x00 0x32 0xFF
+
+
+### FREEBYTES
+
+> _Requests the amount of free space on the filesystem in bytes_   
+> Command `0x33`
+
+The request consists of the standard header and nothing more.
+
+Example:
+
+    0xBEEF 0x00 0x33
+
+The reply is the standard header, return code, and a 64 bit little-endian
+unsigned integer for the free space in bytes. For example, if there are
+65,536 bytes free (0x0000000000010000) the response would be:
+
+    0xBEEF 0x00 0x33 0x00 0x00 0x00 0x01 0x00 0x00 0x00 0x00
+
+Request failed with error 0x1F:
+
+    0xBEEF 0x00 0x33 0x1F
 
 
 List of Valid Return Codes
