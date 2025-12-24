@@ -384,16 +384,27 @@ void tnfs_rename(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 {
 	struct statvfs vfs;
-	unsigned char resp[4];
 
 	get_root(s, fnbuf, MAX_FILEPATH);
 	if (statvfs(fnbuf, &vfs) == 0)
 	{
-		unsigned long long total_bytes = (unsigned long long)vfs.f_blocks * (unsigned long long)vfs.f_frsize;
-		unsigned long kb = (unsigned long)(total_bytes / 1024ULL);
-		uint32tnfs(resp, (uint32_t)kb);
+		uint64_t block_size = (vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize);
+		uint64_t total_bytes = (uint64_t)vfs.f_blocks * block_size;
 		hdr->status = TNFS_SUCCESS;
-		tnfs_send(s, hdr, resp, sizeof(resp));
+		if ( hdr->cmd == TNFS_SIZEBYTESDEVICE )
+		{
+			unsigned char resp[8];
+			uint64tnfs(resp, total_bytes);
+			tnfs_send(s, hdr, resp, sizeof(resp));
+		}
+		else
+		{
+			// Fallback to 32-bit size in KB
+			unsigned char resp[4];
+			uint64_t kb = (total_bytes / 1024ULL);
+			uint32tnfs(resp, (uint32_t)kb);
+			tnfs_send(s, hdr, resp, sizeof(resp));
+		}
 	}
 	else
 	{
@@ -408,16 +419,27 @@ void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 void tnfs_free(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 {
 	struct statvfs vfs;
-	unsigned char resp[4];
 
 	get_root(s, fnbuf, MAX_FILEPATH);
 	if (statvfs(fnbuf, &vfs) == 0)
 	{
-		unsigned long long free_bytes = (unsigned long long)vfs.f_bavail * (unsigned long long)vfs.f_frsize;
-		unsigned long kb = (unsigned long)(free_bytes / 1024ULL);
-		uint32tnfs(resp, (uint32_t)kb);
+		uint64_t block_size = (vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize);
+		uint64_t free_bytes = (uint64_t)vfs.f_bavail * block_size;
 		hdr->status = TNFS_SUCCESS;
-		tnfs_send(s, hdr, resp, sizeof(resp));
+		if ( hdr->cmd == TNFS_FREEBYTESDEVICE )
+				{
+			unsigned char resp[8];
+			uint64tnfs(resp, free_bytes);
+			tnfs_send(s, hdr, resp, sizeof(resp));
+		}
+		else
+		{
+			// Fallback to 32-bit size in KB
+			unsigned char resp[4];
+			uint64_t kb = (free_bytes / 1024ULL);
+			uint32tnfs(resp, (uint32_t)kb);
+			tnfs_send(s, hdr, resp, sizeof(resp));
+		}
 	}
 	else
 	{
