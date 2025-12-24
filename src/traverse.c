@@ -23,6 +23,52 @@ uint8_t _diropts;
 uint16_t _maxresults;
 const char *_pattern;
 
+/* ignore patterns loaded from .ignore in the root of traversal */
+char **_ignore_patterns = NULL;
+int _ignore_count = 0;
+
+static void _free_traverse_ignore(void)
+{
+	if (_ignore_patterns)
+	{
+		for (int i = 0; i < _ignore_count; ++i)
+			free(_ignore_patterns[i]);
+		free(_ignore_patterns);
+		_ignore_patterns = NULL;
+		_ignore_count = 0;
+	}
+}
+
+static void _load_traverse_ignore(const char *path)
+{
+	char ignorepath[MAX_TNFSPATH + 16];
+	char line[1024];
+	FILE *f;
+
+	_free_traverse_ignore();
+	snprintf(ignorepath, sizeof(ignorepath), "%s/.ignore", path);
+	f = fopen(ignorepath, "r");
+	if (!f)
+		return;
+	while (fgets(line, sizeof(line), f) != NULL)
+	{
+		char *s = line;
+		while (*s && (*s == ' ' || *s == '\t')) s++;
+		char *e = s + strlen(s);
+		while (e > s && (e[-1] == '\n' || e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) e--;
+		*e = '\0';
+		if (*s == '\0' || *s == '#')
+			continue;
+		char **tmp = realloc(_ignore_patterns, sizeof(char *) * (_ignore_count + 1));
+		if (!tmp) break;
+		_ignore_patterns = tmp;
+		_ignore_patterns[_ignore_count] = strdup(s);
+		if (_ignore_patterns[_ignore_count])
+			_ignore_count++;
+	}
+	fclose(f);
+}
+
 // A list to hold all subdirectory names
 directory_entry_list _list_dirs = NULL;
 
@@ -55,6 +101,16 @@ int _nftwfunc(const char *fullpath, const struct stat *statptr, int fileflags, s
 		{
 			if (_pattern != NULL && gitignore_glob_match(filename_with_slash, _pattern) == false)
 				return 0;
+		}
+
+		/* skip entries that match .ignore patterns loaded for this traversal */
+		if (_ignore_count > 0)
+		{
+			for (int ip = 0; ip < _ignore_count; ++ip)
+			{
+				if (gitignore_glob_match(filename_with_slash, _ignore_patterns[ip]) || gitignore_glob_match(filename, _ignore_patterns[ip]))
+					return 0;
+			}
 		}
 
 		// Skip this if it's hidden (assuming TNFS_DIROPT_NO_SKIPHIDDEN isn't set)
@@ -127,8 +183,12 @@ int _traverse_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uin
 	int fd_limit = 5;
 	int flags = FTW_CHDIR | FTW_DEPTH | FTW_MOUNT;
 
+	/* load .ignore patterns for this traversal root */
+	_load_traverse_ignore(_path);
+
 	if (nftw(_path, _nftwfunc, fd_limit, flags) == -1)
 	{
+		_free_traverse_ignore();
 		return errno;
 	}
 
@@ -158,6 +218,8 @@ int _traverse_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uin
 #endif
 
 	dirh->current_entry = dirh->entry_list;
+
+	_free_traverse_ignore();
 
 	return 0;
 }

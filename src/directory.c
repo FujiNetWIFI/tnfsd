@@ -48,6 +48,63 @@
 #include "traverse.h"
 #include "match.h"
 
+static void _free_ignore_patterns(dir_handle *dirh)
+{
+	if (!dirh)
+		return;
+	if (dirh->ignore_patterns)
+	{
+		for (int i = 0; i < dirh->ignore_count; ++i)
+		{
+			free(dirh->ignore_patterns[i]);
+		}
+		free(dirh->ignore_patterns);
+		dirh->ignore_patterns = NULL;
+		dirh->ignore_count = 0;
+	}
+}
+
+static void _load_ignore_for_dhandle(dir_handle *dirh)
+{
+	char ignorepath[MAX_TNFSPATH + 16];
+	char line[1024];
+	FILE *f;
+
+	if (!dirh)
+		return;
+
+	_free_ignore_patterns(dirh);
+
+	snprintf(ignorepath, sizeof(ignorepath), "%s/.ignore", dirh->path);
+	f = fopen(ignorepath, "r");
+	if (!f)
+		return;
+
+	while (fgets(line, sizeof(line), f) != NULL)
+	{
+		char *s = line;
+		// strip newline and whitespace
+		while (*s && (*s == ' ' || *s == '\t')) s++;
+		char *e = s + strlen(s);
+		while (e > s && (e[-1] == '\n' || e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) e--;
+		*e = '\0';
+		// skip empty and comments
+		if (*s == '\0' || *s == '#')
+			continue;
+		// add to array
+		char **tmp = realloc(dirh->ignore_patterns, sizeof(char *) * (dirh->ignore_count + 1));
+		if (!tmp)
+			break;
+		dirh->ignore_patterns = tmp;
+		dirh->ignore_patterns[dirh->ignore_count] = strdup(s);
+		if (dirh->ignore_patterns[dirh->ignore_count])
+			dirh->ignore_count++;
+	}
+	fclose(f);
+}
+/* forward prototype for opendir_ext loader (struct defined below) */
+static void _load_ignore_for_opendir_ext(struct tnfs_opendir_ext *handle, const char *dirpath);
+
 #ifdef TNFS_DIR_EXT
 #include <stdint.h>
 #include <string.h>
@@ -64,6 +121,8 @@ struct tnfs_opendir_ext {
 	int do_lowercase;           // ;l "lower case" names; default: as-is
 	int do_camelcase;           // ;c "Camel Case" names; default: as-is
 	char *wildcard;
+	char **ignore_patterns;
+	int ignore_count;
 };
 static int alphacase_sort(const struct dirent **a, const struct dirent **b) {
 	return strcasecmp((*a)->d_name, (*b)->d_name);
@@ -131,7 +190,49 @@ int tnfs_setroot(const char *rootdir)
 	strlcpy(root, rootdir, MAX_ROOT);
 	return 0;
 }
+#if defined(TNFS_DIR_EXT)
+/* implement loader for opendir_ext now that struct is defined */
+static void _load_ignore_for_opendir_ext(struct tnfs_opendir_ext *handle, const char *dirpath)
+{
+	char ignorepath[MAX_TNFSPATH + 16];
+	char line[1024];
+	FILE *f;
 
+	if (!handle)
+		return;
+
+	if (handle->ignore_patterns)
+	{
+		for (int i = 0; i < handle->ignore_count; ++i)
+			free(handle->ignore_patterns[i]);
+		free(handle->ignore_patterns);
+		handle->ignore_patterns = NULL;
+		handle->ignore_count = 0;
+	}
+
+	snprintf(ignorepath, sizeof(ignorepath), "%s/.ignore", dirpath);
+	f = fopen(ignorepath, "r");
+	if (!f)
+		return;
+	while (fgets(line, sizeof(line), f) != NULL)
+	{
+		char *s = line;
+		while (*s && (*s == ' ' || *s == '\t')) s++;
+		char *e = s + strlen(s);
+		while (e > s && (e[-1] == '\n' || e[-1] == '\r' || e[-1] == ' ' || e[-1] == '\t')) e--;
+		*e = '\0';
+		if (*s == '\0' || *s == '#')
+			continue;
+		char **tmp = realloc(handle->ignore_patterns, sizeof(char *) * (handle->ignore_count + 1));
+		if (!tmp) break;
+		handle->ignore_patterns = tmp;
+		handle->ignore_patterns[handle->ignore_count] = strdup(s);
+		if (handle->ignore_patterns[handle->ignore_count])
+			handle->ignore_count++;
+	}
+	fclose(f);
+}
+#endif
 /* validates a path points to an actual directory */
 int validate_dir(Session *s, const char *path)
 {
@@ -365,6 +466,10 @@ void tnfs_opendir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 			handle->total = n;
 			handle->namelist = namelist;
 			handle->wildcard = mask;
+			/* load .ignore for this directory iterator */
+			_load_ignore_for_opendir_ext(handle, s->dhandles[i].path);
+			handle->ignore_patterns = NULL;
+			handle->ignore_count = 0;
 
 			s->dhandles[i].handle = (void*)handle;
 #else
@@ -416,6 +521,15 @@ void tnfs_readdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 		/* handle forward, reverse and shuffle iterators */
 		entry = handle->namelist[handle->at];
 		handle->at = (handle->at + handle->inc) % handle->total;
+		/* ignore patterns for this iterator */
+		if (handle->ignore_count > 0)
+		{
+			for (int ip = 0; ip < handle->ignore_count; ++ip)
+			{
+				if (gitignore_glob_match(entry->d_name, handle->ignore_patterns[ip]))
+					goto repeat;
+			}
+		}
 		/* repeat if options and conditions do not match */
 		if(handle->do_exclude_sysnames) if(entry->d_name[0] == '.') goto repeat;
 		if(handle->wildcard) if(!wildcard(handle->wildcard, entry->d_name)) goto repeat;
@@ -800,6 +914,9 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 	if ((dirh->handle = opendir(dirh->path)) == NULL)
 		return errno;
 
+	/* load .ignore patterns for this directory (if present) */
+	_load_ignore_for_dhandle(dirh);
+
 	// A list to hold all subdirectory names
 	directory_entry_list list_dirs = NULL;
 	// A list to hold all normal file names
@@ -809,6 +926,21 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 	// Read every entry
 	while ((entry = readdir(dirh->handle)) != NULL)
 	{
+		/* skip entries that match .ignore patterns */
+		bool _skip_entry = false;
+		if (dirh->ignore_count > 0)
+		{
+			for (int ip = 0; ip < dirh->ignore_count; ++ip)
+			{
+				if (gitignore_glob_match(entry->d_name, dirh->ignore_patterns[ip]))
+				{
+					_skip_entry = true;
+					break;
+				}
+			}
+		}
+		if (_skip_entry)
+			continue;
 		// Try to stat the file before we can decide on other things
 		fileinfo_t finf;
 		snprintf(temp_statpath, sizeof(temp_statpath), "%s%c%s", dirh->path, FILEINFO_PATHSEPARATOR, entry->d_name);
@@ -1173,6 +1305,12 @@ void _tnfs_free_dir_handle(dir_handle* dhandle)
 	}
 	if(handle->namelist) free(handle->namelist);
 	if(handle->wildcard) free(handle->wildcard);
+	if(handle->ignore_patterns)
+	{
+		for (int i = 0; i < handle->ignore_count; ++i)
+			free(handle->ignore_patterns[i]);
+		free(handle->ignore_patterns);
+	}
 	free(handle);
 #else
 	if (dhandle->handle != NULL)
@@ -1180,6 +1318,9 @@ void _tnfs_free_dir_handle(dir_handle* dhandle)
 		closedir(dhandle->handle);
 	}
 #endif
+
+    /* free any loaded ignore patterns */
+    _free_ignore_patterns(dhandle);
 
 	dhandle->handle = NULL;
 	dhandle->path[0] = '\0';
@@ -1205,6 +1346,8 @@ void _tnfs_init_dhandle(dir_handle* dhandle, const char *path, uint8_t diropt, u
 	dhandle->diropt = diropt;
 	dhandle->sortopt = sortopt;
 	dhandle->open_at = now;
+	dhandle->ignore_patterns = NULL;
+	dhandle->ignore_count = 0;
 }
 
 int _tnfs_find_free_dir_handle(Session *s, const char *path, uint8_t diropt, uint8_t sortopt, const char *pattern, bool reuse)
