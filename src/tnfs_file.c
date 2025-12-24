@@ -385,18 +385,8 @@ void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 {
 	struct statvfs vfs;
 	unsigned char resp[4];
-#ifdef DEBUG
-	fprintf(stderr, "size: bufsz=%d buf=%s\n", bufsz, buf);
-#endif
 
-	if (bufsz < 2 ||
-		tnfs_valid_filename(s, fnbuf, (char *)buf, bufsz) < 0)
-	{
-		hdr->status = TNFS_EINVAL;
-		tnfs_send(s, hdr, NULL, 0);
-		return;
-	}
-
+	get_root(s, fnbuf, MAX_FILEPATH);
 	if (statvfs(fnbuf, &vfs) == 0)
 	{
 		unsigned long long total_bytes = (unsigned long long)vfs.f_blocks * (unsigned long long)vfs.f_frsize;
@@ -419,18 +409,8 @@ void tnfs_free(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 {
 	struct statvfs vfs;
 	unsigned char resp[4];
-#ifdef DEBUG
-	fprintf(stderr, "free: bufsz=%d buf=%s\n", bufsz, buf);
-#endif
 
-	if (bufsz < 2 ||
-		tnfs_valid_filename(s, fnbuf, (char *)buf, bufsz) < 0)
-	{
-		hdr->status = TNFS_EINVAL;
-		tnfs_send(s, hdr, NULL, 0);
-		return;
-	}
-
+	get_root(s, fnbuf, MAX_FILEPATH);
 	if (statvfs(fnbuf, &vfs) == 0)
 	{
 		unsigned long long free_bytes = (unsigned long long)vfs.f_bavail * (unsigned long long)vfs.f_frsize;
