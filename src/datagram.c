@@ -70,7 +70,7 @@ tnfs_cmdfunc filecmd[NUM_FILECMDS] =
 	 &tnfs_open};
 
 tnfs_cmdfunc devcmd[NUM_DEVCMDS] =
-	{&tnfs_size, &tnfs_free};
+	{&tnfs_size, &tnfs_free, &tnfs_size, &tnfs_free};
 
 const char *sesscmd_names[NUM_SESSCMDS] =
 	{
@@ -104,8 +104,10 @@ const char *filecmd_names[NUM_FILECMDS] =
 
 const char *devcmd_names[NUM_DEVCMDS] =
 	{
-		"TNFS_SIZEDDEVICE",
-		"TNFS_FREEDEVICE"};
+		"TNFS_SIZEDEVICE",
+		"TNFS_FREEDEVICE",
+		"TNFS_SIZEBYTESDEVICE",
+		"TNFS_FREEBYTESDEVICE"};
 
 const char *get_cmd_name(uint8_t cmd)
 {

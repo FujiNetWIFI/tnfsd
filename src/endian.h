@@ -31,6 +31,7 @@ uint16_t	tnfs16uint(unsigned char *value);
 uint32_t	tnfs32uint(unsigned char *value);
 void		uint16tnfs(unsigned char *buf, uint16_t value);
 void		uint32tnfs(unsigned char *buf, uint32_t value);
+void		uint64tnfs(unsigned char *buf, uint64_t value);
 
 #endif
 
