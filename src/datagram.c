@@ -558,6 +558,12 @@ void tnfs_decode(struct sockaddr_in *cliaddr, int cli_fd, int rxbytes, unsigned 
 		else
 			tnfs_badcommand(&hdr, sess);
 		break;
+	case CLASS_DEVICE:
+		if (cmdidx < NUM_DEVCMDS)
+			(*devcmd[cmdidx])(&hdr, sess, databuf, datasz);
+		else
+			tnfs_badcommand(&hdr, sess);
+		break;
 	default:
 		tnfs_badcommand(&hdr, sess);
 	}
