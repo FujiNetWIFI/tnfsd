@@ -133,6 +133,9 @@ typedef struct _dir_handle
 	directory_entry_list entry_list;
 	directory_entry_list_node * current_entry;
 	time_t open_at;
+	/* ignore patterns loaded from .ignore file in the directory */
+	char **ignore_patterns;
+	int ignore_count;
 } dir_handle;
 
 typedef struct _session
