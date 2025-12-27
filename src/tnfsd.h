@@ -23,6 +23,6 @@ void tnfsd_init_logs(int log_output_fd);
 int tnfsd_start(const char* path, int port, bool read_only);
 
 // Stop the TNFS server and deallocate memory.
-void tnfsd_stop();
+void tnfsd_stop(int sig);
 
 #endif

@@ -50,7 +50,7 @@ int tnfsd_start(const char* path, int port, bool read_only)
 	return 0;
 }
 
-void tnfsd_stop()
+void tnfsd_stop(int sig)
 {
 	LOG("Stopping tnfsd server.\n");
 	tnfs_sockclose();
