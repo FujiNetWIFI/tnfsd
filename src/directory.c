@@ -102,12 +102,12 @@ static void _load_ignore_for_dhandle(dir_handle *dirh)
 	}
 	fclose(f);
 }
-/* forward prototype for opendir_ext loader (struct defined below) */
-static void _load_ignore_for_opendir_ext(struct tnfs_opendir_ext *handle, const char *dirpath);
 
 #ifdef TNFS_DIR_EXT
 #include <stdint.h>
 #include <string.h>
+/* forward prototype for opendir_ext loader (struct defined below) */
+static void _load_ignore_for_opendir_ext(struct tnfs_opendir_ext *handle, const char *dirpath);
 struct tnfs_opendir_ext {
 	struct dirent **namelist;
 	int at, start, inc, total, visited;
