@@ -1,5 +1,6 @@
 #include <stdio.h>
 
+#include "atari.h"
 #include "auth.h"
 #include "datagram.h"
 #include "directory.h"
@@ -21,7 +22,7 @@ void tnfsd_init_logs(int log_output_fd)
 	log_init(log_output);
 }
 
-int tnfsd_start(const char* path, int port, bool read_only)
+int tnfsd_start(const char* path, int port, bool read_only, bool atari_mode)
 {
 	LOG("Starting tnfsd version %s on port %d using root directory \"%s\"\n", version, port, path);
 	if (read_only)
@@ -31,6 +32,10 @@ int tnfsd_start(const char* path, int port, bool read_only)
 	else
 	{
 		LOG("The server runs in read-write mode. TNFS clients can upload and modify files. Use -r to enable read-only mode.\n");
+	}
+	if (atari_mode)
+	{
+		LOG("Atari mode enabled: Binary files ($FFFF) will be presented as ATR disk images.\n");
 	}
 
 	if (tnfs_setroot(path) < 0)
@@ -43,8 +48,9 @@ int tnfsd_start(const char* path, int port, bool read_only)
 	{
 		LOG("Can't bind port %d\n", port);
 		return TNFSD_ERR_SOCKET_ERROR;
-	}      
+	}
 	auth_init(read_only);     /* initialize authentication */
+	atari_init(atari_mode);   /* initialize Atari virtualization */
 	tnfs_mainloop();          /* run */
 	tnfs_event_close();
 	return 0;

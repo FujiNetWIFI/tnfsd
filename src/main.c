@@ -49,13 +49,14 @@ int main(int argc, char **argv)
     char *gvalue = NULL;
 #endif
     bool read_only = false;
+    bool atari_mode = false;
     char *pvalue = NULL;
     char *root_path = NULL;
 
     #ifdef ENABLE_CHROOT
-    while((opt = getopt(argc, argv, "ru:g:p:")) != -1)
+    while((opt = getopt(argc, argv, "aru:g:p:")) != -1)
     #else
-    while((opt = getopt(argc, argv, "rp:")) != -1)
+    while((opt = getopt(argc, argv, "arp:")) != -1)
     #endif
     {
         switch(opt)
@@ -65,6 +66,9 @@ int main(int argc, char **argv)
                 break;
             case 'r':
                 read_only = true;
+                break;
+            case 'a':
+                atari_mode = true;
                 break;
             #ifdef ENABLE_CHROOT
             case 'u':
@@ -140,7 +144,7 @@ int main(int argc, char **argv)
     tnfsd_init();
     tnfsd_init_logs(STDERR_FILENO);
     signal(SIGINT, tnfsd_stop);
-    tnfsd_start(root_path, port, read_only);
+    tnfsd_start(root_path, port, read_only, atari_mode);
 
     return 0;
 }
@@ -148,8 +152,10 @@ int main(int argc, char **argv)
 void print_usage()
 {
     #ifdef ENABLE_CHROOT
-    fprintf(stderr, "Usage: tnfsd [-u <username> -g <group> -p <port> -r] <root dir>\n");
+    fprintf(stderr, "Usage: tnfsd [-u <username> -g <group> -p <port> -r -a] <root dir>\n");
+    fprintf(stderr, "  -a  Enable Atari mode (present binary files as ATR images)\n");
     #else
-    fprintf(stderr, "Usage: tnfsd [-p <port> -r] <root dir>\n");
+    fprintf(stderr, "Usage: tnfsd [-p <port> -r -a] <root dir>\n");
+    fprintf(stderr, "  -a  Enable Atari mode (present binary files as ATR images)\n");
     #endif
 }
