@@ -283,6 +283,9 @@ void get_root(Session *s, char *buf, int bufsz)
    Returns 0 if path is outside tnfs root */
 int validate_path(Session *s, const char *path)
 {
+#if defined(UNIX) && !defined(ENABLE_CHROOT)
+	return 1; // Always allow symlinks when we're intentionally avoiding chroot
+#else
 	char valpath[MAX_FILEPATH];
 
 #ifdef WIN32
@@ -309,6 +312,7 @@ int validate_path(Session *s, const char *path)
 #endif
 		return 0;
 	}
+#endif
 }
 
 /* normalize paths, remove multiple delimiters
