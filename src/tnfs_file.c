@@ -52,6 +52,7 @@
 #include "bsdcompat.h"
 #include "log.h"
 #include "auth.h"
+#include "atari.h"
 
 char fnbuf[MAX_FILEPATH];
 unsigned char iobuf[MAX_IOSZ + 2]; /* 2 bytes added for the size param */
@@ -132,6 +133,20 @@ void tnfs_open(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 				return;
 			}
 
+			/* Check if Atari virtualization should be enabled for this file */
+			if (atari_is_enabled() && atari_should_virtualize(fnbuf, tnfs_make_mode(flags)))
+			{
+				struct stat st;
+				if (fstat(fd, &st) == 0)
+				{
+					atari_mark_fd(s, i, st.st_size);
+#ifdef DEBUG
+					fprintf(stderr, "Atari mode: virtualizing %s as ATR (real size: %lld)\n",
+							fnbuf, (long long)st.st_size);
+#endif
+				}
+			}
+
 			s->fd[i] = fd;
 			hdr->status = TNFS_SUCCESS;
 			reply[0] = (unsigned char)i;
@@ -156,7 +171,17 @@ void tnfs_read(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 	requestsz = tnfs16uint(buf + 1);
 	if (requestsz > MAX_IOSZ)
 		requestsz = MAX_IOSZ;
-	readsz = read(fd, iobuf + 2, (size_t)requestsz);
+
+	/* Check if this is an Atari virtual file */
+	if (atari_is_virtual_fd(s, *buf))
+	{
+		readsz = atari_virtual_read(s, *buf, fd, iobuf + 2, (size_t)requestsz);
+	}
+	else
+	{
+		readsz = read(fd, iobuf + 2, (size_t)requestsz);
+	}
+
 	if (readsz > 0)
 	{
 		hdr->status = TNFS_SUCCESS;
@@ -230,7 +255,18 @@ void tnfs_lseek(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 	fprintf(stderr, "lseek: offset=%d (%x) whence=%d tnfs_whence=%d\n",
 			offset, offset, whence, *(buf + 1));
 #endif
-	if ((result = lseek(fd, (off_t)offset, whence)) < 0)
+
+	/* Check if this is an Atari virtual file */
+	if (atari_is_virtual_fd(s, *buf))
+	{
+		result = atari_virtual_lseek(s, *buf, fd, (off_t)offset, whence);
+	}
+	else
+	{
+		result = lseek(fd, (off_t)offset, whence);
+	}
+
+	if (result < 0)
 	{
 		hdr->status = tnfs_error(errno);
 #ifdef DEBUG
@@ -258,6 +294,12 @@ void tnfs_close(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 
 	if (close(fd) == 0)
 	{
+		/* Clear Atari metadata if present */
+		if (atari_is_enabled())
+		{
+			atari_clear_fd(s, *buf);
+		}
+
 		s->fd[*buf] = 0; /* clear the session's descriptor */
 		hdr->status = TNFS_SUCCESS;
 		tnfs_send(s, hdr, NULL, 0);
@@ -297,7 +339,19 @@ void tnfs_stat(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 		uint16tnfs(msgbuf + ST_MODE_OFFSET, (uint16_t)statinfo.st_mode);
 		uint16tnfs(msgbuf + ST_UID_OFFSET, (uint16_t)statinfo.st_uid);
 		uint16tnfs(msgbuf + ST_GID_OFFSET, (uint16_t)statinfo.st_gid);
-		uint32tnfs(msgbuf + ST_SIZE_OFFSET, (uint32_t)statinfo.st_size);
+
+		/* Check if this file would be virtualized as Atari ATR */
+		uint32_t report_size = (uint32_t)statinfo.st_size;
+		if (atari_is_enabled() && atari_should_virtualize(fnbuf, O_RDONLY))
+		{
+			report_size = ATR_TOTAL_SIZE;
+#ifdef DEBUG
+			fprintf(stderr, "stat: Reporting virtual ATR size %u instead of real size %lld\n",
+					report_size, (long long)statinfo.st_size);
+#endif
+		}
+		uint32tnfs(msgbuf + ST_SIZE_OFFSET, report_size);
+
 		uint32tnfs(msgbuf + ST_ATIME_OFFSET, (uint32_t)statinfo.st_atime);
 		uint32tnfs(msgbuf + ST_MTIME_OFFSET, (uint32_t)statinfo.st_mtime);
 		uint32tnfs(msgbuf + ST_CTIME_OFFSET, (uint32_t)statinfo.st_ctime);
