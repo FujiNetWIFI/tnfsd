@@ -20,7 +20,7 @@ void tnfsd_init_logs(int log_output_fd);
 //
 // In case of an error, it'll return immediate a negative
 // value (see TNFSD_ERR_* constants).
-int tnfsd_start(const char* path, int port, bool read_only);
+int tnfsd_start(const char* path, int port, bool read_only, bool atari_mode);
 
 // Stop the TNFS server and deallocate memory.
 void tnfsd_stop(int sig);

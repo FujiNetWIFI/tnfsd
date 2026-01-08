@@ -138,6 +138,13 @@ typedef struct _dir_handle
 	int ignore_count;
 } dir_handle;
 
+/* Forward declare atari_fd_metadata for use in Session struct */
+typedef struct {
+	bool is_atari_binary;
+	off_t virtual_position;
+	off_t real_file_size;
+} atari_fd_metadata;
+
 typedef struct _session
 {
 	time_t last_contact; /* timestamp of last received request */
@@ -145,6 +152,7 @@ typedef struct _session
 	in_addr_t ipaddr;		/* client addr */
 	uint8_t seqno;			/* last sequence number */
 	int fd[MAX_FD_PER_CONN];	/* file descriptors */
+	atari_fd_metadata atari_fd[MAX_FD_PER_CONN]; /* Atari virtualization metadata */
 	//DIR *dhnd[MAX_DHND_PER_CONN];	/* directory handles */
 	//char dpaths[MAX_DHND_PER_CONN][MAX_TNFSPATH]; /* directory path for each handle */
 	dir_handle dhandles[MAX_DHND_PER_CONN];

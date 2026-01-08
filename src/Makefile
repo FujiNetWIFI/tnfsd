@@ -42,11 +42,41 @@ ifdef USAGELOG
 endif
 
 CFLAGS=$(FLAGS) $(EXFLAGS) $(LOGFLAGS) -DNEED_ERRTABLE
-OBJS=main.o datagram.o event_common.o log.o session.o endian.o directory.o errortable.o tnfs_file.o chroot.o fileinfo.o stats.o auth.o traverse.o match.o tnfsd.o $(EXOBJS)
+OBJS=main.o datagram.o event_common.o log.o session.o endian.o directory.o errortable.o tnfs_file.o chroot.o fileinfo.o stats.o auth.o traverse.o match.o tnfsd.o atari.o $(EXOBJS)
+
+# Check if boot sector assembly source exists
+ATARI_BOOT_ASM := $(wildcard atari-boot-xex-file.asm)
+ifneq ($(ATARI_BOOT_ASM),)
+    # Check if xa assembler is available
+    XA := $(shell which xa 2>/dev/null)
+    ifneq ($(XA),)
+        CFLAGS += -DATARI_BOOTSECTOR_EXISTS
+        ATARI_BOOT_EXISTS := yes
+    else
+        $(error xa assembler not found but $(ATARI_BOOT_ASM) exists. Install xa: brew install xa (macOS) or apt-get install xa65 (Linux))
+    endif
+endif
 
 all:	$(OBJS)
 	$(CC) -o ../bin/$(EXEC) $(OBJS) $(LIBS)
 
+# Assemble boot sector from assembly source
+atari_bootsector.bin: atari-boot-xex-file.asm
+	@echo "Assembling Atari boot sector from assembly source..."
+	xa -o atari_bootsector.bin atari-boot-xex-file.asm
+
+# Auto-generate boot sector header from binary
+atari_bootsector.h: atari_bootsector.bin
+	@echo "Converting Atari boot sector binary to header..."
+	xxd -i atari_bootsector.bin > atari_bootsector.h
+
+# atari.o depends on the generated header (if boot sector source exists)
+ifeq ($(ATARI_BOOT_EXISTS),yes)
+atari.o: atari.c atari.h atari_bootsector.h
+else
+atari.o: atari.c atari.h
+endif
+
 clean:
-	$(RM) -f $(OBJS) bin/$(EXEC)
+	$(RM) -f $(OBJS) atari_bootsector.bin atari_bootsector.h bin/$(EXEC)
 

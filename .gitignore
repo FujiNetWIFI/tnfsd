@@ -5,3 +5,5 @@
 /tnfsd.exe
 bin/tnfsd.exe
 /data
+src/atari_bootsector.bin
+src/atari_bootsector.h
