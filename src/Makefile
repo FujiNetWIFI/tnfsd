@@ -15,7 +15,7 @@ ifndef OS
 endif
 
 ifeq ($(OS),LINUX)
-    FLAGS = -Wall -DUNIX -DNEED_BSDCOMPAT -DENABLE_CHROOT 
+    FLAGS = -Wall -DUNIX -DNEED_BSDCOMPAT
     EXOBJS = strlcpy.o strlcat.o event_epoll.o 
     LIBS =
     EXEC = tnfsd
@@ -27,10 +27,23 @@ ifeq ($(OS),Windows_NT)
     EXEC = tnfsd.exe
 endif
 ifeq ($(OS),BSD)
-    FLAGS = -Wall -DUNIX -DBSD -DENABLE_CHROOT
+    FLAGS = -Wall -DUNIX -DBSD
     EXOBJS = event_kqueue.o
     LIBS =
     EXEC = tnfsd
+endif
+
+# ENABLE_CHROOT defaults to yes on Unix systems for security
+# Disable with: make ENABLE_CHROOT=no
+ifeq ($(OS),LINUX)
+    ENABLE_CHROOT ?= yes
+endif
+ifeq ($(OS),BSD)
+    ENABLE_CHROOT ?= yes
+endif
+
+ifeq ($(ENABLE_CHROOT),yes)
+    CHROOTFLAGS = -DENABLE_CHROOT
 endif
 
 ifdef DEBUG
