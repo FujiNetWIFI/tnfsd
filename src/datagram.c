@@ -188,55 +188,29 @@ int tnfs_sockinit(int port)
 		return -1;
 	}
 
-#ifndef WIN32
-	/* enables sending of keep-alive messages */
-	int ka_enable = 1;
-	if (setsockopt(tcplistenfd, SOL_SOCKET, SO_KEEPALIVE, &ka_enable, sizeof(ka_enable)) < 0)
-	{
-		LOG("setsockopt(SO_KEEPALIVE) failed");
-		tnfs_sockclose();
-		return -1;
-	}
-	int ka_idle = TCP_KA_IDLE;
-#if defined(TCP_KEEPIDLE)
-	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPIDLE, &ka_idle, sizeof(ka_idle)) < 0)
-	{
-		LOG("setsockopt(TCP_KEEPIDLE) failed");
-		tnfs_sockclose();
-		return -1;
-	}
-#elif defined(TCP_KEEPALIVE)
-	/* macOS/BSD use TCP_KEEPALIVE to set the idle time (seconds) */
-	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPALIVE, &ka_idle, sizeof(ka_idle)) < 0)
-	{
-		LOG("setsockopt(TCP_KEEPALIVE) failed");
-		tnfs_sockclose();
-		return -1;
-	}
-#else
-	/* no platform support for setting idle timeout; continue */
-#endif
-	/* the time (in seconds) between individual keepalive probes */
-	int ka_interval = TCP_KA_INTVL;
-#ifdef TCP_KEEPINTVL
-	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPINTVL, &ka_interval, sizeof(ka_interval)) < 0)
-	{
-		LOG("setsockopt(TCP_KEEPINTVL) failed");
-		tnfs_sockclose();
-		return -1;
-	}
-#endif
-	/* the maximum number of keepalive probes TCP should send before dropping the connection */
-	int ka_count = TCP_KA_COUNT;
-#ifdef TCP_KEEPCNT
-	if (setsockopt(tcplistenfd, IPPROTO_TCP, TCP_KEEPCNT, &ka_count, sizeof(ka_count)) < 0)
-	{
-		LOG("setsockopt(TCP_KEEPCNT) failed");
-		tnfs_sockclose();
-		return -1;
-	}
-#endif
-#endif
+	/* Bug fix (2026-05-19): The TCP keep-alive socket options
+	 * (SO_KEEPALIVE, TCP_KEEPIDLE/TCP_KEEPALIVE, TCP_KEEPINTVL,
+	 * TCP_KEEPCNT) used to be applied to the listening socket here.
+	 *
+	 * That was non-portable behaviour:
+	 *   - On Linux these options are inherited by accepted connections
+	 *     and have no effect on the listen socket itself, so the code
+	 *     "worked".
+	 *   - On macOS / BSD enabling SO_KEEPALIVE on a listening socket
+	 *     causes the kernel to start sending TCP keep-alive probes on
+	 *     the listening socket itself.  A listen socket has no peer,
+	 *     so the probes go unanswered and after roughly
+	 *     TCP_KA_IDLE + TCP_KA_COUNT * TCP_KA_INTVL seconds the kernel
+	 *     reaps the socket.  Subsequent client SYNs are then rejected
+	 *     by the kernel with RST,ACK because nothing is listening on
+	 *     that port anymore (FujiNet would log
+	 *     errno 104 "Connection reset by peer" and fall back to UDP).
+	 *
+	 * The intent was always to set keep-alive defaults for accepted
+	 * client connections, so the options are now applied per-connection
+	 * in tcp_accept() via apply_keepalive_options() instead.  See that
+	 * function for the actual setsockopt() calls.
+	 */
 
 #ifndef WIN32
 	signal(SIGPIPE, SIG_IGN);
@@ -332,6 +306,57 @@ void tnfs_mainloop()
 	tnfs_free_all_sessions();
 }
 
+#ifndef WIN32
+/* Apply TCP keep-alive options to a freshly accepted client connection.
+ *
+ * These used to be applied to the listening socket in tnfs_sockinit(),
+ * which broke the listener on macOS/BSD (see comment there).  Each
+ * setsockopt failure here is logged but is not fatal -- a single client
+ * connection that cannot enable keep-alive is still usable, and the
+ * listener stays up to serve other clients.
+ */
+static void apply_keepalive_options(int fd)
+{
+	int ka_enable = 1;
+	if (setsockopt(fd, SOL_SOCKET, SO_KEEPALIVE, &ka_enable, sizeof(ka_enable)) < 0)
+	{
+		LOG("setsockopt(SO_KEEPALIVE) failed on accepted socket: %s\n", strerror(errno));
+	}
+
+	int ka_idle = TCP_KA_IDLE;
+#if defined(TCP_KEEPIDLE)
+	if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPIDLE, &ka_idle, sizeof(ka_idle)) < 0)
+	{
+		LOG("setsockopt(TCP_KEEPIDLE) failed on accepted socket: %s\n", strerror(errno));
+	}
+#elif defined(TCP_KEEPALIVE)
+	/* macOS/BSD use TCP_KEEPALIVE to set the idle time (seconds) */
+	if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPALIVE, &ka_idle, sizeof(ka_idle)) < 0)
+	{
+		LOG("setsockopt(TCP_KEEPALIVE) failed on accepted socket: %s\n", strerror(errno));
+	}
+#else
+	/* no platform support for setting idle timeout; continue */
+#endif
+
+	int ka_interval = TCP_KA_INTVL;
+#ifdef TCP_KEEPINTVL
+	if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPINTVL, &ka_interval, sizeof(ka_interval)) < 0)
+	{
+		LOG("setsockopt(TCP_KEEPINTVL) failed on accepted socket: %s\n", strerror(errno));
+	}
+#endif
+
+	int ka_count = TCP_KA_COUNT;
+#ifdef TCP_KEEPCNT
+	if (setsockopt(fd, IPPROTO_TCP, TCP_KEEPCNT, &ka_count, sizeof(ka_count)) < 0)
+	{
+		LOG("setsockopt(TCP_KEEPCNT) failed on accepted socket: %s\n", strerror(errno));
+	}
+#endif
+}
+#endif /* !WIN32 */
+
 void tcp_accept(TcpConnection *tcp_conn_list)
 {
 	int acc_fd, i;
@@ -353,6 +378,13 @@ void tcp_accept(TcpConnection *tcp_conn_list)
 		fprintf(stderr, "WARNING: unable to accept TCP connection: %s\n", strerror(errno));
 		return;
 	}
+
+#ifndef WIN32
+	/* Apply per-connection keep-alive options.  See comment in
+	 * tnfs_sockinit() for why this is done here and not on the
+	 * listening socket. */
+	apply_keepalive_options(acc_fd);
+#endif
 
 	bool event_registered = false;
 	if (tnfs_event_register(acc_fd))
