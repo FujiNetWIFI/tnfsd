@@ -5,16 +5,23 @@ name: tnfsd Build
 jobs:
   build-windows:
     runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
     steps:
       - name: Checkout
         uses: actions/checkout@v4
-      - name: Install xa
-        run: |
-          choco install -y xa65
-        # If xa65 isn't in Chocolatey, build from source or use a pre-built binary:
-        # See https://www.floodgap.com/retrotech/xa/
+      - name: Set up MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: >-
+            mingw-w64-x86_64-gcc
+            mingw-w64-x86_64-make
+            mingw-w64-x86_64-xa65
       - name: Build tnfsd
-        run: cd D:\a\tnfsd\tnfsd\src && make OS=Windows_NT DEBUG=yes USAGELOG=yes
+        run: cd src && make OS=Windows_NT DEBUG=yes USAGELOG=yes
       - uses: actions/upload-artifact@master
         with:
           name: tnfsd_win-x64
