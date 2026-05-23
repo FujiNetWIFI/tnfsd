@@ -3,7 +3,7 @@ on: [push]
 name: tnfsd Build
 
 jobs:
-build-windows:
+  build-windows:
     runs-on: windows-latest
     defaults:
       run:
