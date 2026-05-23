@@ -8,6 +8,11 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install xa
+        run: |
+          choco install -y xa65
+        # If xa65 isn't in Chocolatey, build from source or use a pre-built binary:
+        # See https://www.floodgap.com/retrotech/xa/
       - name: Build tnfsd
         run: cd D:\a\tnfsd\tnfsd\src && make OS=Windows_NT DEBUG=yes USAGELOG=yes
       - uses: actions/upload-artifact@master
@@ -20,6 +25,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install dependencies
+        run: sudo apt-get update && sudo apt-get install -y xa65
       - name: Build tnfsd
         run: cd /home/runner/work/tnfsd/tnfsd/src && make OS=LINUX DEBUG=yes USAGELOG=yes
       - uses: actions/upload-artifact@master
@@ -32,6 +39,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install xa
       - name: Build tnfsd
         run: cd /Users/runner/work/tnfsd/tnfsd/src && make OS=BSD DEBUG=yes USAGELOG=yes
       - uses: actions/upload-artifact@master
@@ -44,9 +53,12 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+      - name: Install dependencies
+        run: brew install xa
       - name: Build tnfsd
         run: cd /Users/runner/work/tnfsd/tnfsd/src && make OS=BSD DEBUG=yes USAGELOG=yes
       - uses: actions/upload-artifact@master
         with:
           name: tnfsd_macos-x64
           path: bin/tnfsd
+
