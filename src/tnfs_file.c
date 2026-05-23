@@ -32,7 +32,9 @@
 #include <sys/types.h>
 #include <unistd.h>
 #include <stdio.h>
+#ifndef WIN32
 #include <sys/statvfs.h>
+#endif
 
 #ifdef UNIX
 #include <sys/uio.h>
@@ -437,15 +439,32 @@ void tnfs_rename(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 
 void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 {
-	struct statvfs vfs;
+	uint64_t total_bytes = 0;
+	int ok = 0;
 
 	get_root(s, fnbuf, MAX_FILEPATH);
+
+#ifdef WIN32
+	ULARGE_INTEGER free_avail, total, total_free;
+	if (GetDiskFreeSpaceExA(fnbuf, &free_avail, &total, &total_free))
+	{
+		total_bytes = total.QuadPart;
+		ok = 1;
+	}
+#else
+	struct statvfs vfs;
 	if (statvfs(fnbuf, &vfs) == 0)
 	{
 		uint64_t block_size = (vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize);
-		uint64_t total_bytes = (uint64_t)vfs.f_blocks * block_size;
+		total_bytes = (uint64_t)vfs.f_blocks * block_size;
+		ok = 1;
+	}
+#endif
+
+	if (ok)
+	{
 		hdr->status = TNFS_SUCCESS;
-		if ( hdr->cmd == TNFS_SIZEBYTESDEVICE )
+		if (hdr->cmd == TNFS_SIZEBYTESDEVICE)
 		{
 			unsigned char resp[8];
 			uint64tnfs(resp, total_bytes);
@@ -453,7 +472,6 @@ void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 		}
 		else
 		{
-			// Fallback to 32-bit size in KB
 			unsigned char resp[4];
 			uint64_t kb = (total_bytes / 1024ULL);
 			uint32tnfs(resp, (uint32_t)kb);
@@ -472,23 +490,39 @@ void tnfs_size(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 
 void tnfs_free(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 {
-	struct statvfs vfs;
+	uint64_t free_bytes = 0;
+	int ok = 0;
 
 	get_root(s, fnbuf, MAX_FILEPATH);
+
+#ifdef WIN32
+	ULARGE_INTEGER free_avail, total, total_free;
+	if (GetDiskFreeSpaceExA(fnbuf, &free_avail, &total, &total_free))
+	{
+		free_bytes = free_avail.QuadPart;
+		ok = 1;
+	}
+#else
+	struct statvfs vfs;
 	if (statvfs(fnbuf, &vfs) == 0)
 	{
 		uint64_t block_size = (vfs.f_frsize ? vfs.f_frsize : vfs.f_bsize);
-		uint64_t free_bytes = (uint64_t)vfs.f_bavail * block_size;
+		free_bytes = (uint64_t)vfs.f_bavail * block_size;
+		ok = 1;
+	}
+#endif
+
+	if (ok)
+	{
 		hdr->status = TNFS_SUCCESS;
-		if ( hdr->cmd == TNFS_FREEBYTESDEVICE )
-				{
+		if (hdr->cmd == TNFS_FREEBYTESDEVICE)
+		{
 			unsigned char resp[8];
 			uint64tnfs(resp, free_bytes);
 			tnfs_send(s, hdr, resp, sizeof(resp));
 		}
 		else
 		{
-			// Fallback to 32-bit size in KB
 			unsigned char resp[4];
 			uint64_t kb = (free_bytes / 1024ULL);
 			uint32tnfs(resp, (uint32_t)kb);
