@@ -544,8 +544,15 @@ void tnfs_decode(struct sockaddr_in *cliaddr, int cli_fd, int rxbytes, unsigned 
 		}
 		if (sess->cli_fd != 0 && sess->cli_fd != cli_fd)
 		{
-			TNFSMSGLOG(&hdr, "Session is assigned to another TCP connection");
-			return;
+			/* The same client (the IP was verified above) is reaching us on a
+			 * new connection while the session is still bound to a previous one.
+			 * This happens when the old connection went away without us seeing a
+			 * close -- e.g. a NAT/firewall dropped the idle path, so the client's
+			 * FIN never arrived and the old socket lingers as a zombie until
+			 * keepalive/CONN_TIMEOUT reaps it. Migrate the session to the new
+			 * connection instead of rejecting every request until then. */
+			TNFSMSGLOG(&hdr, "Migrating session from fd %d to new TCP connection fd %d",
+					   sess->cli_fd, cli_fd);
 		}
 		/* Update session timestamp */
 		sess->last_contact = time(NULL);
