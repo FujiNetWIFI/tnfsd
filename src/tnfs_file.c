@@ -64,6 +64,16 @@ void tnfs_open_deprecated(Header *hdr, Session *s, unsigned char *buf,
 {
 	unsigned char *bufptr;
 
+	/* Need at least flags(1) + one filename byte incl. NUL.
+	 * Without this, a short packet makes bufsz-2 underflow below and
+	 * memcpy() runs off the end of the buffer (remote crash). */
+	if (bufsz < 3)
+	{
+		hdr->status = TNFS_EINVAL;
+		tnfs_send(s, hdr, NULL, 0);
+		return;
+	}
+
 	// new format datagram is slightly larger than the deprecated one.
 	unsigned char *newbuf = (unsigned char *)malloc(bufsz + 2);
 
@@ -91,7 +101,8 @@ void tnfs_open(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 	int flags, mode;
 	unsigned char reply[2];
 
-	if (bufsz < 3 ||
+	/* need flags(2) + mode(2) + at least one filename byte incl. NUL */
+	if (bufsz < 5 ||
 		tnfs_valid_filename(s, fnbuf, (char *)buf + 4, bufsz - 4) < 0)
 	{
 		/* filename could not be constructed */
@@ -223,6 +234,14 @@ void tnfs_write(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 		return;
 
 	writesz = tnfs16uint(buf + 1);
+	/* never read past the bytes we actually received (buf+3 .. buf+bufsz),
+	 * and never exceed a single IO's worth. Without this a client can claim
+	 * writesz up to 65535 and cause write() to copy far beyond the receive
+	 * buffer, disclosing server memory into the file. */
+	if (writesz > bufsz - 3)
+		writesz = bufsz - 3;
+	if (writesz > MAX_IOSZ)
+		writesz = MAX_IOSZ;
 	writesz = write(fd, buf + 3, (size_t)writesz);
 	if (writesz > 0)
 	{
@@ -591,7 +610,7 @@ int validate_fd(Header *hdr, Session *s, unsigned char *buf, int bufsz,
 				int propersize)
 {
 	if (bufsz < propersize ||
-		*buf > MAX_FD_PER_CONN ||
+		*buf >= MAX_FD_PER_CONN ||
 		s->fd[*buf] == 0)
 	{
 #ifdef DEBUG

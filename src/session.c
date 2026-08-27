@@ -31,6 +31,10 @@
 #include <string.h>
 #include <unistd.h>
 #include <errno.h>
+#include <time.h>
+#ifdef WIN32
+#include <process.h>
+#endif
 
 #include "session.h"
 #include "log.h"
@@ -50,9 +54,18 @@ void tnfs_init()
 	for (i = 0; i < MAX_SESSIONS; i++)
 		slist[i] = NULL;
 
+	/* Seed the PRNG used to generate session IDs (tnfs_newsid()).
+	 * An unseeded rand() yields the same SID sequence on every run;
+	 * combined with the IP-only session authentication over UDP, that
+	 * makes session prediction/hijacking much easier. BSD uses the
+	 * kernel-seeded random(); other platforms seed rand() from the
+	 * clock mixed with the pid so restarts don't repeat. */
 #ifdef BSD
-	/* initialize prng */
 	srandomdev();
+#elif defined(WIN32)
+	srand((unsigned)(time(NULL) ^ _getpid()));
+#else
+	srand((unsigned)(time(NULL) ^ getpid()));
 #endif
 }
 

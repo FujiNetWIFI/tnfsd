@@ -181,10 +181,15 @@ int tnfs_setroot(const char *rootdir)
 	if (strlen(rootdir) > MAX_ROOT)
 		return -1;
 
+	/* Resolve the canonical root used by validate_path(). If this fails,
+	 * realroot would be left indeterminate and every confinement check
+	 * would compare against garbage, so refuse to start instead. */
 #ifdef WIN32
-	GetFullPathNameA(rootdir, MAX_ROOT, realroot, NULL);
+	if (GetFullPathNameA(rootdir, MAX_ROOT, realroot, NULL) == 0)
+		return -1;
 #else
-	realpath(rootdir, realroot);
+	if (realpath(rootdir, realroot) == NULL)
+		return -1;
 #endif
 
 	strlcpy(root, rootdir, MAX_ROOT);
@@ -288,10 +293,15 @@ int validate_path(Session *s, const char *path)
 #else
 	char valpath[MAX_FILEPATH];
 
+	/* Resolve the path. On failure the contents of valpath are
+	 * indeterminate, so fail closed (treat as outside the root) rather
+	 * than run strstr() over uninitialized stack. */
 #ifdef WIN32
-	GetFullPathNameA(path, MAX_FILEPATH, valpath, NULL);
+	if (GetFullPathNameA(path, MAX_FILEPATH, valpath, NULL) == 0)
+		return 0;
 #else
-	realpath(path, valpath);
+	if (realpath(path, valpath) == NULL)
+		return 0;
 #endif
 
 #ifdef DEBUG
@@ -509,7 +519,7 @@ void tnfs_readdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	char reply[MAX_FILENAME_LEN];
 
 	if (datasz != 1 ||
-		*databuf > MAX_DHND_PER_CONN ||
+		*databuf >= MAX_DHND_PER_CONN ||
 		!s->dhandles[*databuf].open)
 	{
 		hdr->status = TNFS_EBADF;
@@ -565,7 +575,7 @@ void tnfs_readdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 void tnfs_closedir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 {
 	if (datasz != 1 ||
-		*databuf > MAX_DHND_PER_CONN ||
+		*databuf >= MAX_DHND_PER_CONN ||
 		!s->dhandles[*databuf].open)
 	{
 		hdr->status = TNFS_EBADF;
@@ -638,7 +648,7 @@ void tnfs_seekdir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	// databuf holds our directory handle
 	// followed by 4 bytes for the new position
 	if (datasz != 5 ||
-		*databuf > MAX_DHND_PER_CONN ||
+		*databuf >= MAX_DHND_PER_CONN ||
 		!s->dhandles[*databuf].open ||
 		(s->dhandles[*databuf].entry_list == NULL && s->dhandles[*databuf].handle == NULL))
 	{
@@ -681,7 +691,7 @@ void tnfs_telldir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 
 	// databuf holds our directory handle: check it
 	if (datasz != 1 ||
-		*databuf > MAX_DHND_PER_CONN ||
+		*databuf >= MAX_DHND_PER_CONN ||
 		!s->dhandles[*databuf].open ||
 		(s->dhandles[*databuf].entry_list == NULL && s->dhandles[*databuf].handle == NULL))
 	{
@@ -729,7 +739,7 @@ void tnfs_readdirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 	uint8_t sid;
 	// databuf holds our directory handle followed by number of entries requested
 	if (datasz != 2 ||
-		(sid = databuf[0]) > MAX_DHND_PER_CONN)
+		(sid = databuf[0]) >= MAX_DHND_PER_CONN)
 	{
 		hdr->status = TNFS_EBADF;
 		tnfs_send(s, hdr, NULL, 0);
@@ -758,6 +768,10 @@ void tnfs_readdirx(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 #endif
 		hdr->status = TNFS_EOF;
 		tnfs_send(s, hdr, NULL, 0);
+		/* Must return here: falling through builds and sends a second
+		 * reply for one request, corrupting the retransmit state and
+		 * leaking the uninitialized dirpos bytes (reply[2..3]). */
+		return;
 	}
 
 #ifdef DEBUG
@@ -948,7 +962,10 @@ int _load_directory(dir_handle *dirh, uint8_t diropts, uint8_t sortopts, uint16_
 		// Try to stat the file before we can decide on other things
 		fileinfo_t finf;
 		snprintf(temp_statpath, sizeof(temp_statpath), "%s%c%s", dirh->path, FILEINFO_PATHSEPARATOR, entry->d_name);
-		strncpy(statpath, temp_statpath, sizeof(statpath));
+		/* strlcpy always NUL-terminates; strncpy would leave statpath
+		 * unterminated when temp_statpath is longer, causing an
+		 * out-of-bounds read in the get_fileinfo()/stat() below. */
+		strlcpy(statpath, temp_statpath, sizeof(statpath));
 		if (get_fileinfo(statpath, &finf) == 0)
 		{
 			/* If it's not a directory and we have a pattern that this doesn't match, skip it

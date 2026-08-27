@@ -61,6 +61,22 @@ void chroot_tnfs(const char *user, const char *group, const char *newroot)
 		exit(-1);
 	}
 
+	/* Move the working directory inside the jail. Without this the cwd
+	 * remains outside the new root and can be used to escape it. */
+	if(chdir("/") == -1)
+	{
+		perror("chdir");
+		exit(-1);
+	}
+
+	/* Drop the root process's supplementary groups before changing gid;
+	 * otherwise they are retained after the uid/gid change. */
+	if(setgroups(0, NULL) == -1)
+	{
+		perror("setgroups");
+		exit(-1);
+	}
+
 	/* drop the group privileges first */
 	if(setgid(grp->gr_gid) == -1)
 	{
