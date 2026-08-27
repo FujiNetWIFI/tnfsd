@@ -235,8 +235,9 @@ void tnfs_freesession(Session *s, int sindex)
 	}
 	for (i = 0; i < MAX_DHND_PER_CONN; i++)
 	{
-		if (s->dhandles[i].loaded)
-			_tnfs_free_dir_handle(&s->dhandles[i]);
+		/* Always reset every slot so an inconsistent ownership flag cannot
+		 * hide an allocated DIR handle from session cleanup. */
+		_tnfs_free_dir_handle(&s->dhandles[i]);
 	}
 	free(s);
 	slist[sindex] = NULL;

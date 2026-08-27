@@ -373,11 +373,33 @@ void tcp_accept(TcpConnection *tcp_conn_list)
 
 	acc_fd = accept(tcplistenfd, (struct sockaddr *)&cliaddr, &cli_len);
 
-	if (acc_fd < 1)
+#ifdef WIN32
+	if (acc_fd == INVALID_SOCKET)
 	{
-		fprintf(stderr, "WARNING: unable to accept TCP connection: %s\n", strerror(errno));
+		int accept_error = WSAGetLastError();
+		fprintf(stderr, "WARNING: unable to accept TCP connection: %d\n", accept_error);
+		if (accept_error == WSAEMFILE)
+		{
+			Sleep(TCP_ACCEPT_RESOURCE_BACKOFF_MS);
+		}
 		return;
 	}
+#else
+	if (acc_fd < 0)
+	{
+		int accept_error = errno;
+		fprintf(stderr, "WARNING: unable to accept TCP connection: %s\n", strerror(accept_error));
+		if (accept_error == EMFILE || accept_error == ENFILE)
+		{
+			struct timespec delay = {
+				.tv_sec = TCP_ACCEPT_RESOURCE_BACKOFF_MS / 1000,
+				.tv_nsec = (TCP_ACCEPT_RESOURCE_BACKOFF_MS % 1000) * 1000000L
+			};
+			nanosleep(&delay, NULL);
+		}
+		return;
+	}
+#endif
 
 #ifndef WIN32
 	/* Apply per-connection keep-alive options.  See comment in

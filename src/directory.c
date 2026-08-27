@@ -480,8 +480,9 @@ void tnfs_opendir(Header *hdr, Session *s, unsigned char *databuf, int datasz)
 		if ((dptr = opendir(s->dhandles[i].path)) != NULL)
 		{
 			s->dhandles[i].handle = dptr;
-			s->dhandles[i].open = true;
 #endif
+			s->dhandles[i].open = true;
+			s->dhandles[i].loaded = true;
 			/* send OK response */
 			hdr->status = TNFS_SUCCESS;
 			reply[0] = (unsigned char)i;
@@ -1303,19 +1304,22 @@ void _tnfs_free_dir_handle(dir_handle* dhandle)
 	#ifdef TNFS_DIR_EXT
 	/* deallocate ext iterator */
 	struct tnfs_opendir_ext *handle = (struct tnfs_opendir_ext*) dhandle->handle;
-	for(int i = 0; i < handle->total; ++i)
+	if (handle != NULL)
 	{
-		free(handle->namelist[i]);
+		for(int i = 0; i < handle->total; ++i)
+		{
+			free(handle->namelist[i]);
+		}
+		if(handle->namelist) free(handle->namelist);
+		if(handle->wildcard) free(handle->wildcard);
+		if(handle->ignore_patterns)
+		{
+			for (int i = 0; i < handle->ignore_count; ++i)
+				free(handle->ignore_patterns[i]);
+			free(handle->ignore_patterns);
+		}
+		free(handle);
 	}
-	if(handle->namelist) free(handle->namelist);
-	if(handle->wildcard) free(handle->wildcard);
-	if(handle->ignore_patterns)
-	{
-		for (int i = 0; i < handle->ignore_count; ++i)
-			free(handle->ignore_patterns[i]);
-		free(handle->ignore_patterns);
-	}
-	free(handle);
 #else
 	if (dhandle->handle != NULL)
 	{
@@ -1332,6 +1336,7 @@ void _tnfs_free_dir_handle(dir_handle* dhandle)
 	dirlist_free(dhandle->entry_list);
 	dhandle->current_entry = dhandle->entry_list = NULL;
 	dhandle->entry_count = 0;
+	dhandle->open = false;
 	dhandle->loaded = false;
 }
 

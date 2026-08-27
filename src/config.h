@@ -46,5 +46,6 @@
 #define TCP_KA_IDLE 30 /* the time (in seconds) the connection needs to remain idle before TCP starts sending keepalive probes */
 #define TCP_KA_INTVL 1  /* the time (in seconds) between individual keepalive probes */
 #define TCP_KA_COUNT 60 /* the maximum number of keepalive probes TCP should send before dropping the connection */
+#define TCP_ACCEPT_RESOURCE_BACKOFF_MS 100 /* delay before retrying accept() after process/system FD exhaustion */
 
 #endif
