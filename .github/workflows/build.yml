@@ -34,6 +34,8 @@ jobs:
         run: python3 tests/test_udp_burst.py bin/tnfsd
       - name: Test root confinement
         run: python3 tests/test_confinement.py bin/tnfsd
+      - name: Test read-only mode
+        run: python3 tests/test_readonly.py bin/tnfsd
       - uses: actions/upload-artifact@master
         with:
           name: tnfsd_linux-x64
