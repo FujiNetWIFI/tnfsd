@@ -294,7 +294,11 @@ void tnfs_mainloop()
 			if (errno == EINTR)
 				continue;
 #endif
+#ifdef WIN32
+			LOG("event wait failed: %d\n", WSAGetLastError());
+#else
 			LOG("event wait failed: %s\n", strerror(errno));
+#endif
 			break;
 		}
 

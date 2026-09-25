@@ -30,15 +30,32 @@ void tnfs_event_init()
 
 bool tnfs_event_register(int fd)
 {
+#ifdef WIN32
+    /* Winsock's fd_set is a list of up to FD_SETSIZE sockets, whatever
+     * their handle values, not a bitmap indexed by descriptor. */
+    int used = 0;
+    for (int i = 0; i < _EVENT_MAX_FDS; i++)
+    {
+        if (event_fd_list[i] != 0)
+            used++;
+    }
+    if (used >= FD_SETSIZE)
+    {
+        LOG("tnfs_event_register: FD_SETSIZE (%d) sockets already registered\n", FD_SETSIZE);
+        return false;
+    }
+#endif
     for (int i = 0; i < _EVENT_MAX_FDS; i++)
     {
         if (event_fd_list[i] == 0)
         {
+#ifndef WIN32
             if (fd >= FD_SETSIZE)
             {
                 LOG("tnfs_event_register: fd %d exceeds FD_SETSIZE\n", fd);
                 return false;
             }
+#endif
             event_fd_list[i] = fd;
             return true;
         }
