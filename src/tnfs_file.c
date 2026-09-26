@@ -433,6 +433,24 @@ void tnfs_unlink(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 
 void tnfs_chmod(Header *hdr, Session *s, unsigned char *buf, int bufsz)
 {
+	int mode;
+
+	/* mode(2) + a filename of at least its NUL terminator */
+	if (bufsz < 3 || *(buf + bufsz - 1) != 0 ||
+		tnfs_valid_filename(s, fnbuf, (char *)buf + 2, bufsz - 2) < 0)
+	{
+		hdr->status = TNFS_EINVAL;
+		tnfs_send(s, hdr, NULL, 0);
+		return;
+	}
+
+	/* Permission bits only: a client must not set setuid/setgid/sticky. */
+	mode = (*buf + (*(buf + 1) * 256)) & 0777;
+	if (chmod(fnbuf, mode) == 0)
+		hdr->status = TNFS_SUCCESS;
+	else
+		hdr->status = tnfs_error(errno);
+	tnfs_send(s, hdr, NULL, 0);
 }
 
 void tnfs_rename(Header *hdr, Session *s, unsigned char *buf, int bufsz)
