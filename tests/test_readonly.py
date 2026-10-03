@@ -252,6 +252,12 @@ class TnfsClient:
         status, _, _ = self._request(TNFS_STATFILE, path.encode() + b"\x00")
         return status
 
+    def stat_mode(self, path):
+        status, data, _ = self._request(TNFS_STATFILE, path.encode() + b"\x00")
+        if status != TNFS_SUCCESS or len(data) < 2:
+            return None
+        return struct.unpack_from("<H", data, 0)[0]
+
     def open(self, path, flags, mode=0o644):
         payload = struct.pack("<HH", flags, mode) + path.encode() + b"\x00"
         status, data, _ = self._request(TNFS_OPENFILE, payload)
@@ -492,12 +498,17 @@ def run_read_write_control(server_path):
             if status != TNFS_SUCCESS:
                 raise AssertionError(f"without -r, WRITE failed with status {status_name(status)}")
 
-            # CHMOD is deliberately absent here: tnfs_chmod() in
-            # src/tnfs_file.c is an empty stub that never sends a reply, so a
-            # read-write server simply times out on it. The read-only run
-            # still covers CHMOD, because the -r gate refuses the command
-            # before dispatch and does answer with EPERM.
+            # CHMOD has to take effect, not just answer: clear the write bits,
+            # check STAT, then restore them so RENAME and UNLINK still work.
+            status = client.chmod("control.txt", 0o444)
+            mode = client.stat_mode("control.txt")
+            if status != TNFS_SUCCESS or mode is None or mode & 0o222:
+                raise AssertionError(
+                    f"without -r, CHMOD 0444 gave {status_name(status)} and mode "
+                    f"{mode if mode is None else oct(mode)}"
+                )
             for what, status in (
+                ("CHMOD", client.chmod("control.txt", 0o644)),
                 ("MKDIR", client.mkdir("control-dir")),
                 ("RENAME", client.rename("control.txt", "control-moved.txt")),
                 ("UNLINK", client.unlink("control-moved.txt")),
