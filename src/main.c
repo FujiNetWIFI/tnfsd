@@ -34,6 +34,7 @@
 #include "chroot.h"
 #include "log.h"
 #include "tnfsd.h"
+#include "version.h"
 
 /* declare the main() - it won't be used elsewhere so I'll not bother
  * with putting it in a .h file */
@@ -54,13 +55,17 @@ int main(int argc, char **argv)
     char *root_path = NULL;
 
     #ifdef ENABLE_CHROOT
-    while((opt = getopt(argc, argv, "aru:g:p:")) != -1)
+    while((opt = getopt(argc, argv, "arvu:g:p:")) != -1)
     #else
-    while((opt = getopt(argc, argv, "arp:")) != -1)
+    while((opt = getopt(argc, argv, "arvp:")) != -1)
     #endif
     {
         switch(opt)
         {
+            case 'v':
+                printf("tnfsd version %s\n", version);
+                exit(0);
+                break;
             case 'p':
                 pvalue = optarg;
                 break;
@@ -158,4 +163,5 @@ void print_usage()
     fprintf(stderr, "Usage: tnfsd [-p <port> -r -a] <root dir>\n");
     fprintf(stderr, "  -a  Enable Atari mode (present binary files as ATR images)\n");
     #endif
+    fprintf(stderr, "       tnfsd -v  (print the version and exit)\n");
 }
