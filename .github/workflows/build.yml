@@ -89,6 +89,17 @@ jobs:
       GH_TOKEN: ${{ github.token }}
       GH_REPO: ${{ github.repository }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+      - name: Check version.h matches the tag
+        run: |
+          set -euo pipefail
+          expected="${GITHUB_REF_NAME#v}"
+          actual="$(grep -o '"[^"]*"' src/version.h | tr -d '"')"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error file=src/version.h::src/version.h says \"$actual\" but the tag is $GITHUB_REF_NAME. Set it to \"$expected\", commit, and move the tag to that commit."
+            exit 1
+          fi
       - name: Download build artifacts
         uses: actions/download-artifact@v5
         with:
