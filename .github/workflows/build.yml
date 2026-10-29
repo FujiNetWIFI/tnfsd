@@ -13,8 +13,8 @@ jobs:
       - name: Install xa
         shell: powershell
         run: |
-          C:\msys64\usr\bin\pacman -S --noconfirm mingw-w64-x86_64-xa65
-          Copy-Item "C:\msys64\mingw64\bin\xa.exe" -Destination "C:\Windows\System32\xa.exe"
+          C:\msys64\usr\bin\pacman -S --noconfirm mingw-w64-ucrt-x86_64-xa65
+          Copy-Item "C:\msys64\ucrt64\bin\xa.exe" -Destination "C:\Windows\System32\xa.exe"
       - name: Build tnfsd
         shell: cmd
         working-directory: src
